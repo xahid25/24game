@@ -1,0 +1,3075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Our Museum — 3D Romantic Museum & Proposal</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Google Fonts for Editorial Serif + Clean Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+    }
+
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #12100e;
+      color: #f8f5f0;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #museum-root {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* Isolate touch gestures on 3D canvas and virtual joystick */
+    #webgl-canvas,
+    #joystick-zone,
+    #face-preview-canvas {
+      touch-action: none;
+    }
+
+    #face-align-canvas {
+      touch-action: none;
+    }
+
+    /* Allow smooth vertical scrolling inside modals & drawers */
+    .scroll-pan-y {
+      touch-action: pan-y;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Custom subtle range sliders */
+    input[type="range"].museum-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      outline: none;
+    }
+    input[type="range"].museum-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #f43f5e;
+      border: 2px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+    input[type="range"].museum-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #f43f5e;
+      border: 2px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Floating 2D hearts & animations */
+    @keyframes floatHeartUp {
+      0% {
+        transform: translateY(0) translateX(0) scale(0.5) rotate(-8deg);
+        opacity: 0;
+      }
+      15% {
+        opacity: 0.95;
+      }
+      80% {
+        opacity: 0.85;
+      }
+      100% {
+        transform: translateY(-280px) translateX(var(--drift, 24px)) scale(1.25) rotate(12deg);
+        opacity: 0;
+      }
+    }
+
+    .floating-heart-2d {
+      position: fixed;
+      pointer-events: none;
+      z-index: 45;
+      animation: floatHeartUp var(--dur, 3.2s) ease-out forwards;
+      filter: drop-shadow(0 6px 14px rgba(244, 63, 94, 0.45));
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.92); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .animate-pop-in {
+      animation: popIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body>
+  <div id="museum-root">
+    <!-- Main Full-Viewport 3D Canvas -->
+    <canvas id="webgl-canvas" class="block w-full h-full"></canvas>
+
+    <!-- 2D Floating Hearts Overlay Layer -->
+    <div id="hearts-layer" class="pointer-events-none fixed inset-0 z-30 overflow-hidden"></div>
+
+    <!-- 3D-Projected Nametags & Speech Bubbles Overlay -->
+    <div id="world-labels-layer" class="pointer-events-none fixed inset-0 z-10 overflow-hidden">
+      <!-- Boy Nametag + Speech Bubble -->
+      <div id="boy-label-group" class="hidden absolute -translate-x-1/2 -translate-y-full flex flex-col items-center gap-1.5 transition-transform duration-75">
+        <div id="boy-speech-bubble" class="hidden max-w-[210px] px-3 py-1.5 rounded-2xl rounded-bl-sm bg-white/95 text-stone-900 text-xs font-semibold shadow-xl border border-rose-200/80 backdrop-blur-md text-center leading-snug">
+          hi baby 🥰
+        </div>
+        <div class="px-2.5 py-0.5 rounded-full bg-stone-950/75 text-amber-100 text-[11px] font-semibold tracking-wide border border-white/15 backdrop-blur-md shadow">
+          <span id="boy-nametag-text">Leo</span>
+        </div>
+      </div>
+
+      <!-- Girl Nametag -->
+      <div id="girl-label-group" class="hidden absolute -translate-x-1/2 -translate-y-full flex flex-col items-center">
+        <div class="px-2.5 py-0.5 rounded-full bg-rose-950/75 text-rose-100 text-[11px] font-semibold tracking-wide border border-rose-300/20 backdrop-blur-md shadow">
+          <span id="girl-nametag-text">Maya</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOP HUD BAR -->
+    <header
+      id="top-hud"
+      class="fixed top-0 left-0 right-0 z-20 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2.5 pointer-events-none"
+      style="padding-top: calc(var(--sat) + 10px); padding-left: calc(var(--sal) + 12px); padding-right: calc(var(--sar) + 12px);"
+    >
+      <!-- Left: Brand & FPS/Mode Badge -->
+      <div class="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-stone-950/70 backdrop-blur-md border border-white/12 shadow-lg">
+        <span class="text-rose-400 text-sm">🏛️</span>
+        <div class="leading-tight">
+          <div class="font-serif text-sm sm:text-base font-semibold tracking-wide text-amber-50">Our Museum</div>
+          <div id="hud-couple-sub" class="text-[10px] text-stone-300/90 truncate max-w-[140px] sm:max-w-[220px]">From Leo · To Maya</div>
+        </div>
+        <span id="fps-badge" class="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono rounded bg-white/10 text-emerald-300">60 FPS</span>
+      </div>
+
+      <!-- Right: Quality Cycle, Customize & Faces, Quick Proposal Jump -->
+      <div class="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+        <button
+          id="btn-quality"
+          type="button"
+          title="Cycle Graphics Quality"
+          class="px-2.5 sm:px-3 py-2 rounded-xl bg-stone-950/75 hover:bg-stone-900 active:scale-95 text-xs font-semibold text-amber-100 border border-white/15 backdrop-blur-md shadow-lg transition flex items-center gap-1"
+        >
+          <span id="quality-label">✨ Balanced</span>
+        </button>
+
+        <button
+          id="btn-customize"
+          type="button"
+          class="px-2.5 sm:px-3.5 py-2 rounded-xl bg-stone-950/75 hover:bg-stone-900 active:scale-95 text-xs font-semibold text-white border border-white/15 backdrop-blur-md shadow-lg transition flex items-center gap-1.5"
+        >
+          <span>🎭</span>
+          <span class="hidden sm:inline">Customize &amp; Faces</span>
+          <span class="sm:hidden">Faces</span>
+        </button>
+
+        <button
+          id="btn-proposal-jump"
+          type="button"
+          class="px-3 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 active:scale-95 text-xs font-semibold text-white border border-rose-300/30 backdrop-blur-md shadow-lg shadow-rose-950/50 transition flex items-center gap-1.5"
+        >
+          <span>💍</span>
+          <span>Proposal</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- PROPOSAL PROMPT OVERLAY CARD (Shown when near Proposal Wall or via Proposal button) -->
+    <div
+      id="proposal-card"
+      class="hidden fixed bottom-24 sm:bottom-8 left-1/2 -translate-x-1/2 z-25 w-[92vw] max-w-md rounded-3xl bg-stone-950/88 backdrop-blur-xl border border-rose-300/25 p-5 shadow-2xl text-center animate-pop-in"
+      style="margin-bottom: var(--sab);"
+    >
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-xs font-medium mb-2">
+        <span>🐱</span>
+        <span>End of Hall · Special Question</span>
+      </div>
+      <h2 id="proposal-question-title" class="font-serif text-2xl sm:text-3xl font-bold text-white leading-tight">
+        Will you marry me? 🥺
+      </h2>
+      <p id="proposal-tease-msg" class="mt-1.5 text-xs sm:text-sm text-rose-200/90 min-h-[1.25rem]">
+        Every memory in this gallery led right here.
+      </p>
+
+      <div id="proposal-buttons-row" class="mt-4 flex flex-wrap items-center justify-center gap-3 min-h-[56px]">
+        <button
+          id="btn-proposal-yes"
+          type="button"
+          style="transform: scale(1); transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), padding 0.25s ease;"
+          class="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-500 to-red-500 hover:brightness-110 text-white font-bold text-sm sm:text-base shadow-lg shadow-rose-600/40 cursor-pointer"
+        >
+          Yes! 💖
+        </button>
+        <button
+          id="btn-proposal-no"
+          type="button"
+          style="transform: scale(1); transition: transform 0.22s ease, opacity 0.22s ease;"
+          class="px-5 py-2.5 rounded-2xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs sm:text-sm border border-white/15 cursor-pointer"
+        >
+          No
+        </button>
+      </div>
+
+      <button
+        id="btn-dismiss-proposal-card"
+        type="button"
+        class="mt-3 text-[11px] text-stone-400 hover:text-stone-200 underline cursor-pointer"
+      >
+        Hide card (walk closer anytime)
+      </button>
+    </div>
+
+    <!-- KISS PROMPT BAR (Appears after clicking "Yes" on Proposal) -->
+    <div
+      id="kiss-prompt-bar"
+      class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92vw] max-w-md rounded-2xl bg-rose-950/90 backdrop-blur-xl border border-rose-300/35 px-4 py-3 shadow-2xl flex items-center justify-between gap-3 animate-pop-in"
+      style="margin-bottom: var(--sab);"
+    >
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">💋</span>
+        <div>
+          <div id="kiss-prompt-text" class="text-sm font-bold text-white">Leo wants to kiss you</div>
+          <div class="text-[11px] text-rose-200/80">Will you lean in closer?</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          id="btn-kiss-no"
+          type="button"
+          class="px-3 py-1.5 rounded-xl bg-stone-900/80 hover:bg-stone-800 text-stone-200 text-xs font-semibold border border-white/15 cursor-pointer"
+        >
+          Not now
+        </button>
+        <button
+          id="btn-kiss-yes"
+          type="button"
+          class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:brightness-110 text-white text-xs font-bold shadow-md cursor-pointer"
+        >
+          Yes 💕
+        </button>
+      </div>
+    </div>
+
+    <!-- VIRTUAL ANALOG JOYSTICK (Bottom-Left) -->
+    <div
+      id="joystick-zone"
+      class="fixed bottom-4 left-4 z-20 w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center rounded-full bg-stone-950/35 border border-white/15 backdrop-blur-sm shadow-xl"
+      style="bottom: calc(var(--sab) + 16px); left: calc(var(--sal) + 16px);"
+    >
+      <div class="w-16 h-16 rounded-full border border-dashed border-white/25 pointer-events-none"></div>
+      <div
+        id="joystick-knob"
+        class="w-12 h-12 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 border-2 border-white/85 shadow-lg shadow-rose-950/60 pointer-events-none flex items-center justify-center text-white text-xs font-bold"
+        style="transform: translate(0px, 0px);"
+      >
+        ✦
+      </div>
+    </div>
+
+    <!-- COMPACT CONTROLS HINT (Bottom-Right) -->
+    <div
+      class="hidden md:flex fixed bottom-4 right-4 z-20 items-center gap-2 px-3.5 py-2 rounded-2xl bg-stone-950/65 backdrop-blur-md border border-white/12 text-[11px] text-stone-300 shadow-lg pointer-events-none"
+      style="bottom: calc(var(--sab) + 16px); right: calc(var(--sar) + 16px);"
+    >
+      <span><strong class="text-white">WASD / Arrows</strong> Move</span>
+      <span class="opacity-40">•</span>
+      <span><strong class="text-white">Shift</strong> Sprint</span>
+      <span class="opacity-40">•</span>
+      <span><strong class="text-white">Drag</strong> Orbit</span>
+      <span class="opacity-40">•</span>
+      <span><strong class="text-white">Tap Floor</strong> Auto-Walk</span>
+    </div>
+
+    <!-- OPENING CURTAIN SCREEN -->
+    <div
+      id="opening-curtain"
+      class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-[#14110f] via-[#1b1512] to-[#110e0c] px-6 text-center transition-opacity duration-700"
+      style="padding-top: var(--sat); padding-bottom: var(--sab);"
+    >
+      <div class="max-w-md w-full flex flex-col items-center">
+        <div class="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-400/30 flex items-center justify-center text-2xl mb-4 shadow-lg shadow-rose-950/50">
+          🏛️
+        </div>
+        <p class="text-[11px] uppercase tracking-[0.28em] text-amber-200/75 mb-2">Interactive 3D Gallery</p>
+        <h1 class="font-serif text-5xl sm:text-6xl font-bold tracking-tight text-amber-50 drop-shadow">
+          Our Museum
+        </h1>
+        <p id="curtain-couple-line" class="mt-3 text-sm sm:text-base text-rose-200/90 font-medium">
+          From Leo | To Maya
+        </p>
+
+        <!-- Progress Bar -->
+        <div class="mt-7 w-full max-w-xs">
+          <div class="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+            <div id="curtain-progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-amber-300 via-rose-400 to-rose-500 transition-all duration-200"></div>
+          </div>
+          <div id="curtain-status-text" class="mt-2 text-xs text-stone-400">Sculpting gallery &amp; characters...</div>
+        </div>
+
+        <button
+          id="btn-enter-museum"
+          type="button"
+          class="mt-6 px-7 py-3 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 active:scale-95 text-white font-semibold text-sm tracking-wide shadow-xl shadow-rose-950/60 border border-rose-200/25 transition cursor-pointer"
+        >
+          Enter Museum ✨
+        </button>
+      </div>
+    </div>
+
+    <!-- ARTWORK INSPECTION MODAL -->
+    <div
+      id="artwork-modal"
+      class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/75 backdrop-blur-md p-4"
+      style="padding-top: calc(var(--sat) + 16px); padding-bottom: calc(var(--sab) + 16px);"
+    >
+      <div class="scroll-pan-y bg-stone-900 border border-white/15 rounded-3xl max-w-lg w-full max-h-[88dvh] p-5 shadow-2xl text-stone-100 animate-pop-in">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-rose-300 font-semibold">Memory Exhibition</span>
+            <h3 id="artwork-modal-title" class="font-serif text-2xl font-bold text-white leading-snug">Memory Title</h3>
+          </div>
+          <button
+            id="btn-close-artwork"
+            type="button"
+            class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-stone-200 font-bold shrink-0 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden bg-stone-950 border border-white/10 mb-3 flex items-center justify-center">
+          <img id="artwork-modal-img" src="" alt="Artwork" class="w-full h-full object-cover" />
+        </div>
+
+        <p id="artwork-modal-caption" class="text-sm text-stone-200 leading-relaxed mb-4"></p>
+
+        <!-- Edit Artwork Details / Replace Photo -->
+        <details class="rounded-2xl bg-stone-950/65 border border-white/10 p-3.5">
+          <summary class="text-xs font-semibold text-amber-200 cursor-pointer">✏️ Edit Memory Photo, Title &amp; Story</summary>
+          <div class="mt-3 space-y-2.5 text-xs">
+            <div>
+              <label class="block text-stone-400 mb-1">Memory Title</label>
+              <input id="edit-art-title" type="text" class="w-full px-3 py-2 rounded-xl bg-stone-900 border border-white/15 text-white focus:outline-none focus:border-rose-400" />
+            </div>
+            <div>
+              <label class="block text-stone-400 mb-1">Story Caption</label>
+              <textarea id="edit-art-caption" rows="2" class="w-full px-3 py-2 rounded-xl bg-stone-900 border border-white/15 text-white focus:outline-none focus:border-rose-400"></textarea>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <label class="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/35 text-rose-200 font-semibold cursor-pointer">
+                📷 Upload Photo
+                <input id="edit-art-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+              </label>
+              <button
+                id="btn-save-artwork"
+                type="button"
+                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- CUSTOMIZE & FACES DRAWER -->
+    <div
+      id="customize-drawer"
+      class="hidden fixed inset-0 z-40 flex justify-end bg-black/65 backdrop-blur-sm"
+    >
+      <div
+        class="scroll-pan-y w-full max-w-md h-full bg-stone-950 border-l border-white/15 p-5 shadow-2xl flex flex-col gap-5 text-stone-100"
+        style="padding-top: calc(var(--sat) + 20px); padding-bottom: calc(var(--sab) + 24px);"
+      >
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h2 class="font-serif text-2xl font-bold text-white">Customize &amp; Faces</h2>
+            <p class="text-xs text-stone-400">Personalize names, skin tones &amp; 3D face textures</p>
+          </div>
+          <button
+            id="btn-close-customize"
+            type="button"
+            class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Names & Dedication -->
+        <section class="space-y-3 rounded-2xl bg-stone-900/80 border border-white/10 p-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-amber-200">Names &amp; Entrance Plaque</h3>
+          <div class="grid grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <label class="block text-stone-400 mb-1">From (Boy / Sender)</label>
+              <input id="input-sender-name" type="text" value="Leo" class="w-full px-3 py-2 rounded-xl bg-stone-950 border border-white/15 text-white" />
+            </div>
+            <div>
+              <label class="block text-stone-400 mb-1">To (Girl / Receiver)</label>
+              <input id="input-receiver-name" type="text" value="Maya" class="w-full px-3 py-2 rounded-xl bg-stone-950 border border-white/15 text-white" />
+            </div>
+          </div>
+          <div class="text-xs">
+            <label class="block text-stone-400 mb-1">Dedication Plaque Message</label>
+            <input
+              id="input-dedication-msg"
+              type="text"
+              value="Every step inside this gallery holds my favorite moments with you."
+              class="w-full px-3 py-2 rounded-xl bg-stone-950 border border-white/15 text-white"
+            />
+          </div>
+          <button
+            id="btn-apply-names"
+            type="button"
+            class="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-amber-100 border border-white/15 cursor-pointer"
+          >
+            Update Museum Names &amp; Plaque
+          </button>
+        </section>
+
+        <!-- Skin Tones -->
+        <section class="space-y-3 rounded-2xl bg-stone-900/80 border border-white/10 p-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-rose-300">Skin Tone &amp; Limb Blend</h3>
+          <div class="space-y-2.5 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-stone-300">Her Skin Tone</span>
+              <input id="girl-skin-color" type="color" value="#f3c6a5" class="w-9 h-7 rounded cursor-pointer bg-transparent border-0" />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-stone-300">His Skin Tone</span>
+              <input id="boy-skin-color" type="color" value="#e4b08a" class="w-9 h-7 rounded cursor-pointer bg-transparent border-0" />
+            </div>
+          </div>
+        </section>
+
+        <!-- 3D Face Photo Studio -->
+        <section class="space-y-3 rounded-2xl bg-gradient-to-br from-rose-950/45 to-stone-900 border border-rose-400/25 p-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-rose-200">3D Face Photo Studio</h3>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-200">Live 3D Fit</span>
+          </div>
+          <p class="text-xs text-stone-300 leading-relaxed">
+            Upload a clear front-facing photo to open the 3D Face Fit &amp; Skin Blend editor with live rotating head preview.
+          </p>
+
+          <div class="grid grid-cols-2 gap-2.5 pt-1">
+            <label class="flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-2xl bg-stone-950/80 hover:bg-stone-900 border border-dashed border-rose-300/40 text-center cursor-pointer transition">
+              <span class="text-xl">👩🏻‍🎨</span>
+              <span class="text-xs font-semibold text-white">Her 3D Face</span>
+              <span class="text-[10px] text-stone-400">JPG / PNG / WebP</span>
+              <input id="upload-girl-face" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+            </label>
+
+            <label class="flex flex-col items-center justify-center gap-1.5 p-3.5 rounded-2xl bg-stone-950/80 hover:bg-stone-900 border border-dashed border-amber-300/40 text-center cursor-pointer transition">
+              <span class="text-xl">🧑🏻</span>
+              <span class="text-xs font-semibold text-white">His 3D Face</span>
+              <span class="text-[10px] text-stone-400">JPG / PNG / WebP</span>
+              <input id="upload-boy-face" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <button
+              id="btn-reset-faces"
+              type="button"
+              class="flex-1 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-semibold text-stone-200 cursor-pointer"
+            >
+              Reset Default Faces
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- DUAL-PANE 3D FACE FIT & SKIN BLEND MODAL -->
+    <div
+      id="face-studio-modal"
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5"
+      style="padding-top: calc(var(--sat) + 12px); padding-bottom: calc(var(--sab) + 12px);"
+    >
+      <div class="scroll-pan-y bg-stone-900 border border-white/15 rounded-3xl w-full max-w-4xl max-h-[92dvh] p-4 sm:p-6 shadow-2xl text-stone-100 animate-pop-in">
+        <div class="flex items-center justify-between gap-3 pb-3 border-b border-white/10">
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-rose-300 font-semibold">Interactive 3D Face Compositor</span>
+            <h3 id="face-studio-title" class="font-serif text-xl sm:text-2xl font-bold text-white">3D Face Fit &amp; Skin Blend</h3>
+          </div>
+          <button
+            id="btn-close-face-studio"
+            type="button"
+            class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Dual Panes -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <!-- Left Pane: 2D Alignment Stage + Sliders -->
+          <div class="space-y-3 bg-stone-950/75 rounded-2xl p-3.5 border border-white/10">
+            <div class="flex items-center justify-between text-xs text-stone-300">
+              <span class="font-semibold">1. 2D Face Alignment (Drag Photo)</span>
+              <button id="btn-reset-face-params" type="button" class="text-rose-300 hover:underline cursor-pointer">Reset</button>
+            </div>
+
+            <div class="relative mx-auto w-full max-w-[260px] aspect-square rounded-2xl overflow-hidden bg-stone-900 border border-white/15">
+              <canvas id="face-align-canvas" width="260" height="260" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+            </div>
+
+            <!-- Alignment & Skin Sliders -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs pt-1">
+              <div>
+                <div class="flex justify-between text-stone-400 mb-1"><span>Zoom</span><span id="val-face-zoom">1.00x</span></div>
+                <input id="slider-face-zoom" type="range" min="0.5" max="2.2" step="0.02" value="1.0" class="w-full museum-slider" />
+              </div>
+              <div>
+                <div class="flex justify-between text-stone-400 mb-1"><span>Tilt</span><span id="val-face-tilt">0°</span></div>
+                <input id="slider-face-tilt" type="range" min="-35" max="35" step="1" value="0" class="w-full museum-slider" />
+              </div>
+              <div>
+                <div class="flex justify-between text-stone-400 mb-1"><span>Width Stretch</span><span id="val-face-stretch">1.00x</span></div>
+                <input id="slider-face-stretch" type="range" min="0.75" max="1.35" step="0.02" value="1.0" class="w-full museum-slider" />
+              </div>
+              <div>
+                <div class="flex justify-between text-stone-400 mb-1"><span>Skin Warmth</span><span id="val-face-warmth">0</span></div>
+                <input id="slider-face-warmth" type="range" min="-30" max="35" step="1" value="0" class="w-full museum-slider" />
+              </div>
+              <div class="col-span-2">
+                <div class="flex justify-between text-stone-400 mb-1"><span>Edge Feathering</span><span id="val-face-feather">24%</span></div>
+                <input id="slider-face-feather" type="range" min="5" max="55" step="1" value="24" class="w-full museum-slider" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Pane: Live Rotating 3D Head Preview -->
+          <div class="flex flex-col justify-between bg-stone-950/75 rounded-2xl p-3.5 border border-white/10">
+            <div>
+              <div class="flex items-center justify-between text-xs text-stone-300 mb-2">
+                <span class="font-semibold">2. Live 3D Head Preview</span>
+                <span class="text-[11px] text-stone-400">Drag to rotate</span>
+              </div>
+              <div class="relative mx-auto w-full max-w-[260px] aspect-square rounded-2xl overflow-hidden bg-gradient-to-b from-stone-800 to-stone-950 border border-white/15">
+                <canvas id="face-preview-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center justify-end gap-2.5">
+              <button
+                id="btn-cancel-face-studio"
+                type="button"
+                class="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-semibold text-stone-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                id="btn-apply-realistic-face"
+                type="button"
+                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 text-xs font-bold text-white shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                Apply Realistic 3D Face
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NON-BLOCKING TOAST / MESSAGE BANNER -->
+    <div
+      id="toast-banner"
+      class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-stone-900/95 text-amber-100 text-xs font-semibold border border-amber-300/25 shadow-xl backdrop-blur-md"
+    >
+      <span id="toast-message">Updated!</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // 0. SAFE CANVAS HELPERS & TOAST NOTIFICATION (NO alert()/confirm())
+      // =========================================================================
+      function roundRectPath(ctx, x, y, w, h, r) {
+        const radius = Math.max(0, Math.min(r, Math.abs(w) * 0.5, Math.abs(h) * 0.5));
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+      }
+
+      let toastTimer = null;
+      function showToast(msg) {
+        const banner = document.getElementById('toast-banner');
+        const textEl = document.getElementById('toast-message');
+        if (!banner || !textEl) return;
+        textEl.textContent = msg;
+        banner.classList.remove('hidden');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          banner.classList.add('hidden');
+        }, 2600);
+      }
+
+      function hexToRgb(hex) {
+        const clean = (hex || '#f3c6a5').replace('#', '');
+        const num = parseInt(clean, 16);
+        return {
+          r: (num >> 16) & 255,
+          g: (num >> 8) & 255,
+          b: num & 255,
+        };
+      }
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function lerpAngle(a, b, t) {
+        let diff = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+        if (diff < -Math.PI) diff += Math.PI * 2;
+        return a + diff * clamp(t, 0, 1);
+      }
+
+      // =========================================================================
+      // 1. APPLICATION STATE & ADAPTIVE PERFORMANCE ENGINE
+      // =========================================================================
+      const state = {
+        senderName: 'Leo',
+        receiverName: 'Maya',
+        dedicationMsg: 'Every step inside this gallery holds my favorite moments with you.',
+        girlSkinHex: '#f3c6a5',
+        boySkinHex: '#e4b08a',
+        girlFaceDataUrl: null,
+        boyFaceDataUrl: null,
+        qualityMode: 'balanced', // 'smooth' | 'balanced' | 'ultra'
+        proposalAccepted: false,
+        kissTriggered: false,
+        noClickCount: 0,
+        enteredMuseum: false,
+      };
+
+      const QUALITY_PRESETS = {
+        smooth: {
+          label: '⚡ Smooth',
+          pixelRatio: 1.0,
+          antialias: false,
+          shadows: false,
+          maxPixelRatioCap: 1.0,
+        },
+        balanced: {
+          label: '✨ Balanced',
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+          antialias: true,
+          shadows: false,
+          maxPixelRatioCap: 1.5,
+        },
+        ultra: {
+          label: '💎 Ultra',
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 2.0),
+          antialias: true,
+          shadows: true,
+          maxPixelRatioCap: 2.0,
+        },
+      };
+
+      function detectInitialQuality() {
+        const mem = navigator.deviceMemory || 4;
+        const cores = navigator.hardwareConcurrency || 4;
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+        if (mem <= 3 || cores <= 4 || (isMobile && mem <= 4)) {
+          return 'smooth';
+        }
+        return 'balanced';
+      }
+
+      state.qualityMode = detectInitialQuality();
+
+      // =========================================================================
+      // 2. PROCEDURAL CANVAS TEXTURES (ZERO EXTERNAL ASSETS)
+      // =========================================================================
+      function createTravertineFloorTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ede3d2';
+        ctx.fillRect(0, 0, 512, 512);
+
+        // Subtle travertine veins & warm mineral pores
+        for (let i = 0; i < 420; i++) {
+          const y = (i * 19) % 512;
+          const x = (i * 73) % 512;
+          const w = 30 + (i % 90);
+          ctx.fillStyle = i % 2 === 0 ? 'rgba(218, 202, 178, 0.22)' : 'rgba(255, 250, 240, 0.25)';
+          ctx.fillRect(x, y, w, 2);
+        }
+
+        // Tile grout lines (4x4 slabs)
+        ctx.strokeStyle = 'rgba(176, 158, 134, 0.45)';
+        ctx.lineWidth = 2;
+        const step = 128;
+        for (let g = 0; g <= 512; g += step) {
+          ctx.beginPath();
+          ctx.moveTo(g, 0);
+          ctx.lineTo(g, 512);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(0, g);
+          ctx.lineTo(512, g);
+          ctx.stroke();
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(7, 15);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      }
+
+      function createFabricWeaveBumpTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.fillStyle = '#9b9b9b';
+        for (let y = 0; y < 128; y += 4) {
+          for (let x = 0; x < 128; x += 4) {
+            if (((x + y) / 4) % 2 === 0) {
+              ctx.fillRect(x, y, 2, 2);
+            }
+          }
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(10, 10);
+        return tex;
+      }
+
+      function createContactShadowTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(64, 64, 6, 64, 64, 60);
+        grad.addColorStop(0, 'rgba(20, 14, 10, 0.52)');
+        grad.addColorStop(0.55, 'rgba(20, 14, 10, 0.22)');
+        grad.addColorStop(1, 'rgba(20, 14, 10, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 128, 128);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      }
+
+      function createRomanticArtworkDataUrl(index, titleText) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+
+        const palettes = [
+          ['#f8c8b8', '#e68a7c', '#6e3b46'],
+          ['#fde2b8', '#f0a679', '#5c3d4e'],
+          ['#f7d6e0', '#d9829b', '#462c44'],
+          ['#fbe4c8', '#e39b6d', '#4f3a3e'],
+        ];
+        const [c1, c2, c3] = palettes[index % palettes.length];
+
+        const bgGrad = ctx.createLinearGradient(0, 0, 640, 480);
+        bgGrad.addColorStop(0, c1);
+        bgGrad.addColorStop(0.6, c2);
+        bgGrad.addColorStop(1, c3);
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, 640, 480);
+
+        // Soft glowing sun / bokeh circles
+        for (let i = 0; i < 14; i++) {
+          const bx = ((i * 97 + index * 53) % 580) + 30;
+          const by = ((i * 67 + index * 41) % 340) + 30;
+          const br = 18 + (i % 4) * 14;
+          const g = ctx.createRadialGradient(bx, by, 2, bx, by, br);
+          g.addColorStop(0, 'rgba(255, 250, 240, 0.42)');
+          g.addColorStop(1, 'rgba(255, 250, 240, 0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(bx, by, br, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Stylized couple silhouettes walking / holding hands under arch
+        ctx.strokeStyle = 'rgba(255, 248, 240, 0.35)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(320, 255, 175, Math.PI, 0);
+        ctx.stroke();
+
+        // Ground horizon
+        ctx.fillStyle = 'rgba(42, 26, 30, 0.35)';
+        ctx.fillRect(0, 355, 640, 125);
+
+        // Figure A (Left)
+        ctx.fillStyle = '#3b2329';
+        ctx.beginPath();
+        ctx.arc(285, 235, 18, 0, Math.PI * 2);
+        ctx.fill();
+        roundRectPath(ctx, 268, 256, 34, 98, 14);
+        ctx.fill();
+
+        // Figure B (Right)
+        ctx.fillStyle = '#2a191e';
+        ctx.beginPath();
+        ctx.arc(355, 243, 17, 0, Math.PI * 2);
+        ctx.fill();
+        roundRectPath(ctx, 339, 262, 32, 92, 13);
+        ctx.fill();
+
+        // Floating heart between them
+        ctx.fillStyle = '#ff4d6d';
+        ctx.beginPath();
+        const hx = 320, hy = 195, hs = 14;
+        ctx.moveTo(hx, hy + hs);
+        ctx.bezierCurveTo(hx - hs * 1.8, hy, hx - hs * 1.8, hy - hs * 1.3, hx, hy - hs * 0.4);
+        ctx.bezierCurveTo(hx + hs * 1.8, hy - hs * 1.3, hx + hs * 1.8, hy, hx, hy + hs);
+        ctx.fill();
+
+        // Subtle caption strip at bottom
+        roundRectPath(ctx, 36, 396, 568, 56, 14);
+        ctx.fillStyle = 'rgba(20, 14, 16, 0.55)';
+        ctx.fill();
+        ctx.fillStyle = '#fff8f2';
+        ctx.font = '600 22px "Cormorant Garamond", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(titleText, 320, 424);
+
+        return canvas.toDataURL('image/jpeg', 0.88);
+      }
+
+      function createDedicationPlaqueTexture(receiverName, messageText) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 768;
+        canvas.height = 384;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#121214';
+        ctx.fillRect(0, 0, 768, 384);
+
+        // Fine gold border
+        ctx.strokeStyle = 'rgba(245, 198, 118, 0.55)';
+        ctx.lineWidth = 4;
+        roundRectPath(ctx, 18, 18, 732, 348, 18);
+        ctx.stroke();
+
+        ctx.fillStyle = '#f7d594';
+        ctx.font = '700 42px "Cormorant Garamond", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`For ${receiverName || 'Maya'}`, 384, 105);
+
+        ctx.fillStyle = 'rgba(248, 244, 238, 0.88)';
+        ctx.font = '400 24px "Plus Jakarta Sans", sans-serif';
+        const words = (messageText || '').split(' ');
+        let line = '';
+        let y = 175;
+        for (let i = 0; i < words.length; i++) {
+          const test = line ? `${line} ${words[i]}` : words[i];
+          if (ctx.measureText(test).width > 640 && line) {
+            ctx.fillText(line, 384, y);
+            line = words[i];
+            y += 36;
+          } else {
+            line = test;
+          }
+        }
+        if (line) ctx.fillText(line, 384, y);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      }
+
+      function createProposalScreenTexture(accepted) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        const grad = ctx.createLinearGradient(0, 0, 1024, 512);
+        if (!accepted) {
+          grad.addColorStop(0, '#2a1420');
+          grad.addColorStop(0.5, '#46192c');
+          grad.addColorStop(1, '#24121d');
+        } else {
+          grad.addColorStop(0, '#3d1128');
+          grad.addColorStop(0.5, '#7a1c42');
+          grad.addColorStop(1, '#3b1026');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1024, 512);
+
+        // Decorative glowing frame
+        ctx.strokeStyle = 'rgba(255, 182, 200, 0.45)';
+        ctx.lineWidth = 6;
+        roundRectPath(ctx, 24, 24, 976, 464, 28);
+        ctx.stroke();
+
+        // Cute White Kitty on Left
+        const kx = 265, ky = 270;
+        // Ears
+        ctx.fillStyle = '#fff9f5';
+        ctx.beginPath();
+        ctx.moveTo(kx - 75, ky - 35);
+        ctx.lineTo(kx - 92, ky - 115);
+        ctx.lineTo(kx - 20, ky - 82);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(kx + 75, ky - 35);
+        ctx.lineTo(kx + 92, ky - 115);
+        ctx.lineTo(kx + 20, ky - 82);
+        ctx.closePath();
+        ctx.fill();
+
+        // Kitty Body & Head
+        roundRectPath(ctx, kx - 62, ky + 25, 124, 115, 48);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.ellipse(kx, ky - 25, 92, 76, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes (pleading vs happy arc)
+        ctx.strokeStyle = '#29151c';
+        ctx.fillStyle = '#29151c';
+        ctx.lineWidth = 5;
+        if (!accepted) {
+          ctx.beginPath();
+          ctx.arc(kx - 34, ky - 30, 11, 0, Math.PI * 2);
+          ctx.arc(kx + 34, ky - 30, 11, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(kx - 38, ky - 34, 4, 0, Math.PI * 2);
+          ctx.arc(kx + 30, ky - 34, 4, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Happy ^ ^ eyes
+          ctx.beginPath();
+          ctx.arc(kx - 34, ky - 25, 12, Math.PI * 1.1, Math.PI * 1.9);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(kx + 34, ky - 25, 12, Math.PI * 1.1, Math.PI * 1.9);
+          ctx.stroke();
+        }
+
+        // Rosy cheeks & pink nose
+        ctx.fillStyle = 'rgba(255, 110, 145, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(kx - 55, ky - 8, 15, 9, 0, 0, Math.PI * 2);
+        ctx.ellipse(kx + 55, ky - 8, 15, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ff5c8a';
+        ctx.beginPath();
+        ctx.arc(kx, ky - 14, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Red Heart held by Kitty
+        const hx = kx + 58, hy = ky + 58, hs = 22;
+        ctx.fillStyle = '#ff2a5f';
+        ctx.beginPath();
+        ctx.moveTo(hx, hy + hs);
+        ctx.bezierCurveTo(hx - hs * 1.8, hy, hx - hs * 1.8, hy - hs * 1.3, hx, hy - hs * 0.4);
+        ctx.bezierCurveTo(hx + hs * 1.8, hy - hs * 1.3, hx + hs * 1.8, hy, hx, hy + hs);
+        ctx.fill();
+
+        // Main Text on Right
+        ctx.fillStyle = '#fff5f7';
+        ctx.textAlign = 'left';
+        ctx.font = '700 54px "Cormorant Garamond", Georgia, serif';
+        if (!accepted) {
+          ctx.fillText('Will you marry me? 🥺', 415, 225);
+          ctx.fillStyle = 'rgba(255, 224, 232, 0.82)';
+          ctx.font = '400 24px "Plus Jakarta Sans", sans-serif';
+          ctx.fillText('Step closer or tap Proposal below', 418, 285);
+        } else {
+          ctx.fillText('forever starts now ❤️', 415, 225);
+          ctx.fillStyle = 'rgba(255, 224, 232, 0.9)';
+          ctx.font = '500 25px "Plus Jakarta Sans", sans-serif';
+          ctx.fillText('She said YES! Every day is ours.', 418, 285);
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      }
+
+      // Default procedural face texture when no custom photo is applied yet
+      function createDefaultFaceTexture(skinHex, isGirl) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        const rgb = hexToRgb(skinHex);
+
+        ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+        ctx.fillRect(0, 0, 512, 512);
+
+        // Soft cheek blush
+        ctx.fillStyle = 'rgba(235, 115, 125, 0.22)';
+        ctx.beginPath();
+        ctx.ellipse(195, 285, 38, 20, 0, 0, Math.PI * 2);
+        ctx.ellipse(317, 285, 38, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyebrows
+        ctx.strokeStyle = isGirl ? '#2b1d18' : '#261a14';
+        ctx.lineWidth = isGirl ? 6 : 8;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(175, 218);
+        ctx.quadraticCurveTo(205, 206, 235, 217);
+        ctx.moveTo(277, 217);
+        ctx.quadraticCurveTo(307, 206, 337, 218);
+        ctx.stroke();
+
+        // Eyes
+        const eyeY = 248;
+        [205, 307].forEach((ex) => {
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.ellipse(ex, eyeY, 24, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#3c261c';
+          ctx.beginPath();
+          ctx.arc(ex, eyeY, 10, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#110b09';
+          ctx.beginPath();
+          ctx.arc(ex, eyeY, 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Catchlight
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(ex - 4, eyeY - 4, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Subtle nose shadow
+        ctx.strokeStyle = 'rgba(95, 55, 42, 0.35)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(256, 235);
+        ctx.lineTo(250, 292);
+        ctx.quadraticCurveTo(256, 302, 265, 294);
+        ctx.stroke();
+
+        // Gentle smile
+        ctx.strokeStyle = isGirl ? '#c8646e' : '#a85a52';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(256, 326, 24, 0.18 * Math.PI, 0.82 * Math.PI);
+        ctx.stroke();
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      }
+
+      // =========================================================================
+      // 3. THREE.JS SCENE, ENVIRONMENT & GALLERY ARCHITECTURE
+      // =========================================================================
+      const mainCanvas = document.getElementById('webgl-canvas');
+      const renderer = new THREE.WebGLRenderer({
+        canvas: mainCanvas,
+        antialias: QUALITY_PRESETS[state.qualityMode].antialias,
+        powerPreference: 'high-performance',
+      });
+      renderer.setPixelRatio(QUALITY_PRESETS[state.qualityMode].pixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.06;
+      renderer.shadowMap.enabled = QUALITY_PRESETS[state.qualityMode].shadows;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#dfd4c3');
+      scene.fog = new THREE.FogExp2('#dfd4c3', 0.014);
+
+      const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 120);
+
+      // Lighting
+      const hemiLight = new THREE.HemisphereLight('#fff8ec', '#b7a58e', 0.92);
+      hemiLight.position.set(0, 14, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight('#fff2dc', 1.15);
+      dirLight.position.set(8, 16, 10);
+      dirLight.castShadow = QUALITY_PRESETS[state.qualityMode].shadows;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      dirLight.shadow.camera.near = 2;
+      dirLight.shadow.camera.far = 45;
+      const dCam = 18;
+      dirLight.shadow.camera.left = -dCam;
+      dirLight.shadow.camera.right = dCam;
+      dirLight.shadow.camera.top = dCam;
+      dirLight.shadow.camera.bottom = -dCam;
+      scene.add(dirLight);
+
+      const proposalGlowLight = new THREE.PointLight('#ff6b8b', 1.4, 14);
+      proposalGlowLight.position.set(0, 3.6, -21.5);
+      scene.add(proposalGlowLight);
+
+      const fabricBumpTex = createFabricWeaveBumpTexture();
+      const contactShadowTex = createContactShadowTexture();
+
+      // Museum Dimensions: Width = 14 (-7..7), Length = 48 (+23..-25), Height = 5.4
+      const ROOM_HALF_W = 6.8;
+      const ROOM_FRONT_Z = 22.0;
+      const ROOM_BACK_Z = -24.0;
+      const ROOM_HEIGHT = 5.4;
+
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: '#f2e8d9',
+        roughness: 0.85,
+        metalness: 0.02,
+      });
+
+      const floorMat = new THREE.MeshStandardMaterial({
+        map: createTravertineFloorTexture(),
+        roughness: 0.42,
+        metalness: 0.04,
+      });
+
+      const darkBeamMat = new THREE.MeshStandardMaterial({
+        color: '#221e1c',
+        roughness: 0.65,
+        metalness: 0.25,
+      });
+
+      const warmLightPanelMat = new THREE.MeshBasicMaterial({
+        color: '#fff1d6',
+      });
+
+      const woodBenchMat = new THREE.MeshStandardMaterial({
+        color: '#8f5e38',
+        roughness: 0.55,
+        metalness: 0.05,
+        bumpMap: fabricBumpTex,
+        bumpScale: 0.008,
+      });
+
+      const metalLegMat = new THREE.MeshStandardMaterial({
+        color: '#262629',
+        roughness: 0.4,
+        metalness: 0.75,
+      });
+
+      // Floor
+      const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_HALF_W * 2 + 2, ROOM_FRONT_Z - ROOM_BACK_Z + 4), floorMat);
+      floorMesh.rotation.x = -Math.PI / 2;
+      floorMesh.position.set(0, 0, -1);
+      floorMesh.receiveShadow = true;
+      scene.add(floorMesh);
+
+      // Left, Right, Front, Back Walls
+      const roomLen = ROOM_FRONT_Z - ROOM_BACK_Z;
+      const roomCenterZ = (ROOM_FRONT_Z + ROOM_BACK_Z) * 0.5;
+
+      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, ROOM_HEIGHT, roomLen), wallMat);
+      leftWall.position.set(-ROOM_HALF_W, ROOM_HEIGHT * 0.5, roomCenterZ);
+      leftWall.receiveShadow = true;
+      scene.add(leftWall);
+
+      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, ROOM_HEIGHT, roomLen), wallMat);
+      rightWall.position.set(ROOM_HALF_W, ROOM_HEIGHT * 0.5, roomCenterZ);
+      rightWall.receiveShadow = true;
+      scene.add(rightWall);
+
+      const backWall = new THREE.Mesh(new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.4, ROOM_HEIGHT, 0.4), wallMat);
+      backWall.position.set(0, ROOM_HEIGHT * 0.5, ROOM_BACK_Z);
+      backWall.receiveShadow = true;
+      scene.add(backWall);
+
+      const frontWall = new THREE.Mesh(new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.4, ROOM_HEIGHT, 0.4), wallMat);
+      frontWall.position.set(0, ROOM_HEIGHT * 0.5, ROOM_FRONT_Z);
+      scene.add(frontWall);
+
+      // Dark Architectural Ceiling Beam Grid + Recessed Warm Light Panels
+      for (let z = ROOM_BACK_Z + 2; z <= ROOM_FRONT_Z - 2; z += 4.5) {
+        const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(ROOM_HALF_W * 2, 0.26, 0.28), darkBeamMat);
+        crossBeam.position.set(0, ROOM_HEIGHT - 0.13, z);
+        scene.add(crossBeam);
+
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.9), warmLightPanelMat);
+        panel.position.set(0, ROOM_HEIGHT - 0.02, z + 1.4);
+        scene.add(panel);
+      }
+      [-3.4, 0, 3.4].forEach((bx) => {
+        const longBeam = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, roomLen), darkBeamMat);
+        longBeam.position.set(bx, ROOM_HEIGHT - 0.12, roomCenterZ);
+        scene.add(longBeam);
+      });
+
+      // AABB Colliders List: { minX, maxX, minZ, maxZ }
+      const colliders = [];
+
+      function addColliderBox(cx, cz, sx, sz) {
+        colliders.push({
+          minX: cx - sx * 0.5,
+          maxX: cx + sx * 0.5,
+          minZ: cz - sz * 0.5,
+          maxZ: cz + sz * 0.5,
+        });
+      }
+
+      // Wooden Museum Benches
+      function createMuseumBench(x, z, rotY) {
+        const g = new THREE.Group();
+        g.position.set(x, 0, z);
+        g.rotation.y = rotY;
+
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.12, 0.62), woodBenchMat);
+        seat.position.y = 0.46;
+        seat.castShadow = true;
+        seat.receiveShadow = true;
+        g.add(seat);
+
+        [-0.85, 0.85].forEach((lx) => {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.44, 0.54), metalLegMat);
+          leg.position.set(lx, 0.22, 0);
+          g.add(leg);
+        });
+
+        scene.add(g);
+        if (Math.abs(Math.sin(rotY)) > 0.7) {
+          addColliderBox(x, z, 0.72, 2.35);
+        } else {
+          addColliderBox(x, z, 2.35, 0.72);
+        }
+      }
+
+      createMuseumBench(0, 6.5, 0);
+      createMuseumBench(0, -8.5, 0);
+
+      // Entrance Feature Wall: Matte-black partition wall on low white platform + Centerpiece Frame + Angled Plaque
+      const entranceGroup = new THREE.Group();
+      entranceGroup.position.set(0, 0, 14.5);
+      scene.add(entranceGroup);
+
+      const whitePlatform = new THREE.Mesh(
+        new THREE.BoxGeometry(4.4, 0.16, 2.2),
+        new THREE.MeshStandardMaterial({ color: '#faf7f2', roughness: 0.45 })
+      );
+      whitePlatform.position.y = 0.08;
+      whitePlatform.receiveShadow = true;
+      entranceGroup.add(whitePlatform);
+
+      const matteBlackWall = new THREE.Mesh(
+        new THREE.BoxGeometry(3.4, 3.1, 0.34),
+        new THREE.MeshStandardMaterial({ color: '#17171a', roughness: 0.72, metalness: 0.15 })
+      );
+      matteBlackWall.position.set(0, 1.71, -0.15);
+      matteBlackWall.castShadow = true;
+      matteBlackWall.receiveShadow = true;
+      entranceGroup.add(matteBlackWall);
+      addColliderBox(0, 14.35, 4.4, 2.2);
+
+      // Centerpiece Framed Photo on Entrance Partition (facing toward +Z entrance spawn)
+      const centerpieceDataUrl = createRomanticArtworkDataUrl(0, 'Our Beginning');
+      const centerpieceTex = new THREE.TextureLoader().load(centerpieceDataUrl);
+      centerpieceTex.encoding = THREE.sRGBEncoding;
+
+      const cpFrameBorder = new THREE.Mesh(
+        new THREE.BoxGeometry(1.76, 1.36, 0.08),
+        new THREE.MeshStandardMaterial({ color: '#d6b473', roughness: 0.35, metalness: 0.65 })
+      );
+      cpFrameBorder.position.set(0, 1.85, 0.05);
+      entranceGroup.add(cpFrameBorder);
+
+      const cpArtMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 1.2),
+        new THREE.MeshBasicMaterial({ map: centerpieceTex })
+      );
+      cpArtMesh.position.set(0, 1.85, 0.095);
+      entranceGroup.add(cpArtMesh);
+
+      // Angled Black Dedication Plaque in front of Entrance Feature Wall
+      const plaqueTex = createDedicationPlaqueTexture(state.receiverName, state.dedicationMsg);
+      const plaqueMat = new THREE.MeshBasicMaterial({ map: plaqueTex });
+
+      const plaqueStand = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.78, 0.12),
+        darkBeamMat
+      );
+      plaqueStand.position.set(0, 0.55, 1.35);
+      entranceGroup.add(plaqueStand);
+
+      const plaqueBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(1.25, 0.64, 0.06),
+        new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.5, metalness: 0.2 })
+      );
+      plaqueBoard.position.set(0, 0.96, 1.42);
+      plaqueBoard.rotation.x = -0.45;
+      entranceGroup.add(plaqueBoard);
+
+      const plaqueFaceMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.18, 0.58), plaqueMat);
+      plaqueFaceMesh.position.set(0, 0.98, 1.455);
+      plaqueFaceMesh.rotation.x = -0.45;
+      entranceGroup.add(plaqueFaceMesh);
+
+      // 4 Memory Gallery Artworks along Left and Right Walls (Interactive / Tap to Inspect)
+      const artworksData = [
+        {
+          id: 0,
+          title: 'Golden Hour Walk',
+          caption: 'The evening we stayed out watching the sky turn rose-gold and talked for hours without checking the time.',
+          x: -ROOM_HALF_W + 0.24,
+          y: 2.05,
+          z: 7.5,
+          rotY: Math.PI / 2,
+          dataUrl: createRomanticArtworkDataUrl(0, 'Golden Hour Walk'),
+          mesh: null,
+        },
+        {
+          id: 1,
+          title: 'Coffee & Rainy Windows',
+          caption: 'Warm cups, quiet rain outside, and that feeling of home right next to you.',
+          x: ROOM_HALF_W - 0.24,
+          y: 2.05,
+          z: 5.5,
+          rotY: -Math.PI / 2,
+          dataUrl: createRomanticArtworkDataUrl(1, 'Coffee & Rainy Windows'),
+          mesh: null,
+        },
+        {
+          id: 2,
+          title: 'Stolen Smiles',
+          caption: 'Every candid laugh that made ordinary days feel like a movie scene.',
+          x: -ROOM_HALF_W + 0.24,
+          y: 2.05,
+          z: -3.5,
+          rotY: Math.PI / 2,
+          dataUrl: createRomanticArtworkDataUrl(2, 'Stolen Smiles'),
+          mesh: null,
+        },
+        {
+          id: 3,
+          title: 'Every Little Tomorrow',
+          caption: 'All the adventures we have planned and every quiet morning still ahead.',
+          x: ROOM_HALF_W - 0.24,
+          y: 2.05,
+          z: -5.5,
+          rotY: -Math.PI / 2,
+          dataUrl: createRomanticArtworkDataUrl(3, 'Every Little Tomorrow'),
+          mesh: null,
+        },
+      ];
+
+      const interactiveArtworkMeshes = [];
+      artworksData.forEach((art) => {
+        const frameGroup = new THREE.Group();
+        frameGroup.position.set(art.x, art.y, art.z);
+        frameGroup.rotation.y = art.rotY;
+
+        const borderMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(2.26, 1.72, 0.09),
+          new THREE.MeshStandardMaterial({ color: '#2b2420', roughness: 0.5, metalness: 0.3 })
+        );
+        frameGroup.add(borderMesh);
+
+        const tex = new THREE.TextureLoader().load(art.dataUrl);
+        tex.encoding = THREE.sRGBEncoding;
+        const picMat = new THREE.MeshBasicMaterial({ map: tex });
+        const picMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.08, 1.54), picMat);
+        picMesh.position.z = 0.052;
+        picMesh.userData = { artworkId: art.id };
+        frameGroup.add(picMesh);
+
+        art.mesh = picMesh;
+        interactiveArtworkMeshes.push(picMesh);
+        scene.add(frameGroup);
+      });
+
+      // End-of-Hall Proposal Wall Screen (Back Wall at z = ROOM_BACK_Z + 0.26)
+      const proposalWallGroup = new THREE.Group();
+      proposalWallGroup.position.set(0, 2.45, ROOM_BACK_Z + 0.26);
+      scene.add(proposalWallGroup);
+
+      const screenBezel = new THREE.Mesh(
+        new THREE.BoxGeometry(6.8, 3.45, 0.14),
+        new THREE.MeshStandardMaterial({ color: '#191418', roughness: 0.45, metalness: 0.4 })
+      );
+      proposalWallGroup.add(screenBezel);
+
+      const proposalScreenTex = createProposalScreenTexture(false);
+      const proposalScreenMat = new THREE.MeshBasicMaterial({ map: proposalScreenTex });
+      const proposalScreenMesh = new THREE.Mesh(new THREE.PlaneGeometry(6.52, 3.22), proposalScreenMat);
+      proposalScreenMesh.position.z = 0.08;
+      proposalWallGroup.add(proposalScreenMesh);
+
+      // Tap-to-walk pulsing floor target ring
+      const targetRingGroup = new THREE.Group();
+      targetRingGroup.visible = false;
+      const ringOuter = new THREE.Mesh(
+        new THREE.RingGeometry(0.26, 0.36, 32),
+        new THREE.MeshBasicMaterial({ color: '#fb7185', side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+      );
+      ringOuter.rotation.x = -Math.PI / 2;
+      ringOuter.position.y = 0.02;
+      targetRingGroup.add(ringOuter);
+      scene.add(targetRingGroup);
+
+      // =========================================================================
+      // 4. LIFELIKE 3D HUMAN CHARACTERS (7.5-HEAD PROPORTIONS) & RING BOX
+      // =========================================================================
+      // Sculpted head builder with anatomical features, multi-layered eyes, and UV face texture
+      function buildSculptedCharacter(options) {
+        const {
+          skinHex,
+          faceTex,
+          shirtHex,
+          pantsHex,
+          hairHex,
+          isGirl,
+          withVest,
+        } = options;
+
+        const root = new THREE.Group();
+
+        // Soft radial floor contact shadow blob beneath character
+        const shadowBlob = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.95, 0.95),
+          new THREE.MeshBasicMaterial({
+            map: contactShadowTex,
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.85,
+          })
+        );
+        shadowBlob.rotation.x = -Math.PI / 2;
+        shadowBlob.position.y = 0.015;
+        root.add(shadowBlob);
+
+        const skinMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(skinHex),
+          roughness: 0.56,
+          metalness: 0.0,
+          clearcoat: 0.12,
+          clearcoatRoughness: 0.6,
+          bumpMap: fabricBumpTex,
+          bumpScale: 0.002,
+        });
+
+        const faceMat = new THREE.MeshPhysicalMaterial({
+          map: faceTex,
+          roughness: 0.52,
+          metalness: 0.0,
+          clearcoat: 0.14,
+          clearcoatRoughness: 0.55,
+        });
+
+        const shirtMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(shirtHex),
+          roughness: 0.78,
+          metalness: 0.0,
+          bumpMap: fabricBumpTex,
+          bumpScale: 0.012,
+        });
+
+        const pantsMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(pantsHex),
+          roughness: 0.82,
+          metalness: 0.0,
+          bumpMap: fabricBumpTex,
+          bumpScale: 0.014,
+        });
+
+        const hairMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(hairHex),
+          roughness: 0.58,
+          metalness: 0.05,
+          clearcoat: 0.18,
+        });
+
+        const sneakerMat = new THREE.MeshStandardMaterial({
+          color: '#f8fafc',
+          roughness: 0.45,
+          metalness: 0.05,
+        });
+
+        const soleMat = new THREE.MeshStandardMaterial({
+          color: '#d6d3d1',
+          roughness: 0.75,
+        });
+
+        // Total height ~1.72m (7.5 heads where 1 head ~0.23m)
+        const hipsGroup = new THREE.Group();
+        hipsGroup.position.y = 0.92;
+        root.add(hipsGroup);
+
+        // Pelvis / Belt
+        const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.155, 0.16, 20), pantsMat);
+        pelvis.castShadow = true;
+        hipsGroup.add(pelvis);
+
+        if (isGirl) {
+          const belt = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.162, 0.162, 0.04, 20),
+            new THREE.MeshStandardMaterial({ color: '#272220', roughness: 0.5 })
+          );
+          belt.position.y = 0.075;
+          hipsGroup.add(belt);
+
+          const buckle = new THREE.Mesh(
+            new THREE.BoxGeometry(0.045, 0.045, 0.02),
+            new THREE.MeshStandardMaterial({ color: '#eab308', roughness: 0.3, metalness: 0.85 })
+          );
+          buckle.position.set(0, 0.075, 0.16);
+          hipsGroup.add(buckle);
+        }
+
+        // LatheGeometry Sculpted Torso
+        const torsoPoints = [
+          new THREE.Vector2(0.01, 0.0),
+          new THREE.Vector2(isGirl ? 0.145 : 0.16, 0.04),
+          new THREE.Vector2(isGirl ? 0.13 : 0.155, 0.22),
+          new THREE.Vector2(isGirl ? 0.175 : 0.205, 0.44),
+          new THREE.Vector2(0.085, 0.50),
+        ];
+        const torsoGeo = new THREE.LatheGeometry(torsoPoints, 24);
+        const torsoMesh = new THREE.Mesh(torsoGeo, shirtMat);
+        torsoMesh.position.y = 0.06;
+        torsoMesh.castShadow = true;
+        hipsGroup.add(torsoMesh);
+
+        // Boy Olive Knit Sweater Vest over White Shirt
+        if (withVest) {
+          const vestMat = new THREE.MeshPhysicalMaterial({
+            color: '#5b6b45',
+            roughness: 0.85,
+            bumpMap: fabricBumpTex,
+            bumpScale: 0.02,
+          });
+          const vestMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.185, 0.162, 0.34, 20, 1, false),
+            vestMat
+          );
+          vestMesh.scale.set(1.12, 1.0, 0.78);
+          vestMesh.position.set(0, 0.25, 0.0);
+          hipsGroup.add(vestMesh);
+        }
+
+        // Neck & Head Group
+        const neckGroup = new THREE.Group();
+        neckGroup.position.set(0, 0.54, 0.01);
+        hipsGroup.add(neckGroup);
+
+        const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.066, 0.11, 16), skinMat);
+        neckMesh.position.y = 0.03;
+        neckGroup.add(neckMesh);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.185, 0.015);
+        neckGroup.add(headGroup);
+
+        // Sculpted Head Base (SphereGeometry with tapered jawline & brow ridge)
+        const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.116, 28, 24), faceMat);
+        cranium.scale.set(0.94, 1.12, 1.02);
+        cranium.castShadow = true;
+        headGroup.add(cranium);
+
+        // Tapered Jaw & Chin
+        const jawMesh = new THREE.Mesh(new THREE.ConeGeometry(0.088, 0.11, 20), skinMat);
+        jawMesh.rotation.x = Math.PI;
+        jawMesh.scale.set(1.02, 1.0, 0.92);
+        jawMesh.position.set(0, -0.082, 0.022);
+        headGroup.add(jawMesh);
+
+        const chinTip = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 12), skinMat);
+        chinTip.position.set(0, -0.128, 0.045);
+        headGroup.add(chinTip);
+
+        // Subtle Brow Ridge
+        const browRidge = new THREE.Mesh(new THREE.BoxGeometry(0.125, 0.016, 0.035), skinMat);
+        browRidge.position.set(0, 0.036, 0.098);
+        headGroup.add(browRidge);
+
+        // Sculpted Nose
+        const noseBridge = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.052, 12), skinMat);
+        noseBridge.rotation.x = -0.35;
+        noseBridge.position.set(0, 0.002, 0.114);
+        headGroup.add(noseBridge);
+
+        const noseTip = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 12), skinMat);
+        noseTip.position.set(0, -0.018, 0.124);
+        headGroup.add(noseTip);
+
+        // Ears
+        [-0.108, 0.108].forEach((ex) => {
+          const ear = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 12), skinMat);
+          ear.scale.set(0.45, 1.15, 0.85);
+          ear.position.set(ex, 0.002, 0.004);
+          headGroup.add(ear);
+        });
+
+        // Multi-layered Eyes (sclera + iris + cornea catchlight)
+        const eyeMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+        const irisMat = new THREE.MeshBasicMaterial({ color: isGirl ? '#3f271d' : '#2d1e17' });
+        const catchMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+
+        [-0.038, 0.038].forEach((eyeX) => {
+          const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.017, 14, 14), eyeMat);
+          sclera.scale.set(1.15, 0.85, 0.55);
+          sclera.position.set(eyeX, 0.016, 0.104);
+          headGroup.add(sclera);
+
+          const iris = new THREE.Mesh(new THREE.CircleGeometry(0.009, 14), irisMat);
+          iris.position.set(eyeX, 0.016, 0.113);
+          headGroup.add(iris);
+
+          const catchlight = new THREE.Mesh(new THREE.CircleGeometry(0.0032, 8), catchMat);
+          catchlight.position.set(eyeX - 0.003, 0.019, 0.1145);
+          headGroup.add(catchlight);
+        });
+
+        // Hair Sculpting (Girl: long hair + side locks + bangs; Boy: textured dark fluffy hair)
+        if (isGirl) {
+          const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.123, 24, 20), hairMat);
+          hairCap.scale.set(0.98, 1.14, 1.06);
+          hairCap.position.set(0, 0.015, -0.006);
+          headGroup.add(hairCap);
+
+          // Bangs
+          const bangs = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.042, 0.04), hairMat);
+          bangs.position.set(0, 0.058, 0.098);
+          bangs.rotation.x = 0.2;
+          headGroup.add(bangs);
+
+          // Long back hair & side locks
+          const backHair = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.56, 0.08), hairMat);
+          backHair.position.set(0, -0.24, -0.075);
+          headGroup.add(backHair);
+
+          [-0.106, 0.106].forEach((sx) => {
+            const sideLock = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.34, 0.055), hairMat);
+            sideLock.position.set(sx, -0.12, 0.025);
+            headGroup.add(sideLock);
+          });
+        } else {
+          // Boy textured fluffy dark hair
+          const fluffyOffsets = [
+            [0, 0.06, 0.01, 0.085],
+            [-0.055, 0.05, 0.02, 0.062],
+            [0.055, 0.05, 0.02, 0.062],
+            [0, 0.075, -0.035, 0.072],
+            [-0.045, 0.045, 0.065, 0.052],
+            [0.045, 0.045, 0.065, 0.052],
+            [0, 0.052, 0.078, 0.05],
+          ];
+          fluffyOffsets.forEach(([fx, fy, fz, fr]) => {
+            const puff = new THREE.Mesh(new THREE.SphereGeometry(fr, 14, 14), hairMat);
+            puff.position.set(fx, fy, fz);
+            headGroup.add(puff);
+          });
+        }
+
+        // Helper for Sculpted Hand with Fingers & Thumb
+        function createSculptedHand(sideSign) {
+          const handGrp = new THREE.Group();
+          const palm = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.065, 0.026), skinMat);
+          handGrp.add(palm);
+
+          for (let f = -1.5; f <= 1.5; f += 1) {
+            const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.008, 0.045, 8), skinMat);
+            finger.position.set(f * 0.013, -0.048, 0);
+            handGrp.add(finger);
+          }
+
+          const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.009, 0.038, 8), skinMat);
+          thumb.position.set(sideSign * 0.032, -0.02, 0.012);
+          thumb.rotation.z = sideSign * 0.65;
+          handGrp.add(thumb);
+
+          return handGrp;
+        }
+
+        // Left & Right Arms
+        function createArm(sideSign) {
+          const shoulder = new THREE.Group();
+          shoulder.position.set(sideSign * (isGirl ? 0.195 : 0.225), 0.45, 0);
+          hipsGroup.add(shoulder);
+
+          const upperArm = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.044, 0.038, 0.27, 14),
+            withVest ? new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.75 }) : shirtMat
+          );
+          upperArm.position.y = -0.135;
+          upperArm.castShadow = true;
+          shoulder.add(upperArm);
+
+          const elbow = new THREE.Group();
+          elbow.position.y = -0.27;
+          shoulder.add(elbow);
+
+          const forearm = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.036, 0.031, 0.24, 14),
+            withVest ? skinMat : shirtMat
+          );
+          forearm.position.y = -0.12;
+          forearm.castShadow = true;
+          elbow.add(forearm);
+
+          const hand = createSculptedHand(sideSign);
+          hand.position.y = -0.265;
+          elbow.add(hand);
+
+          return { shoulder, elbow, hand };
+        }
+
+        const leftArm = createArm(-1);
+        const rightArm = createArm(1);
+
+        // Left & Right Legs + Sneakers
+        function createLeg(sideSign) {
+          const hipJoint = new THREE.Group();
+          hipJoint.position.set(sideSign * 0.088, -0.04, 0);
+          hipsGroup.add(hipJoint);
+
+          const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.054, 0.42, 16), pantsMat);
+          thigh.position.y = -0.21;
+          thigh.castShadow = true;
+          hipJoint.add(thigh);
+
+          const kneeJoint = new THREE.Group();
+          kneeJoint.position.y = -0.42;
+          hipJoint.add(kneeJoint);
+
+          const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.042, 0.40, 16), pantsMat);
+          shin.position.y = -0.20;
+          shin.castShadow = true;
+          kneeJoint.add(shin);
+
+          // Sneaker
+          const shoeGroup = new THREE.Group();
+          shoeGroup.position.set(0, -0.43, 0.035);
+          kneeJoint.add(shoeGroup);
+
+          const sole = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.025, 0.21), soleMat);
+          sole.position.y = -0.02;
+          shoeGroup.add(sole);
+
+          const upperShoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.055, 0.195), sneakerMat);
+          upperShoe.position.y = 0.015;
+          shoeGroup.add(upperShoe);
+
+          return { hipJoint, kneeJoint, shoeGroup };
+        }
+
+        const leftLeg = createLeg(-1);
+        const rightLeg = createLeg(1);
+
+        return {
+          root,
+          hipsGroup,
+          neckGroup,
+          headGroup,
+          leftArm,
+          rightArm,
+          leftLeg,
+          rightLeg,
+          skinMat,
+          faceMat,
+          shadowBlob,
+        };
+      }
+
+      const girlInitialFaceTex = createDefaultFaceTexture(state.girlSkinHex, true);
+      const boyInitialFaceTex = createDefaultFaceTexture(state.boySkinHex, false);
+
+      const girlChar = buildSculptedCharacter({
+        skinHex: state.girlSkinHex,
+        faceTex: girlInitialFaceTex,
+        shirtHex: '#f6efe4',
+        pantsHex: '#5f7354',
+        hairHex: '#231814',
+        isGirl: true,
+        withVest: false,
+      });
+      girlChar.root.position.set(0, 0, 17.5);
+      scene.add(girlChar.root);
+
+      const boyChar = buildSculptedCharacter({
+        skinHex: state.boySkinHex,
+        faceTex: boyInitialFaceTex,
+        shirtHex: '#ffffff',
+        pantsHex: '#c6ad88',
+        hairHex: '#241914',
+        isGirl: false,
+        withVest: true,
+      });
+      boyChar.root.position.set(1.15, 0, 17.8);
+      scene.add(boyChar.root);
+
+      // Red Velvet Ring Box with Sparkling Diamond (attached to Boy's hand when kneeling at Proposal)
+      const ringBoxGroup = new THREE.Group();
+      ringBoxGroup.visible = false;
+
+      const velvetMat = new THREE.MeshPhysicalMaterial({
+        color: '#9f1239',
+        roughness: 0.78,
+        bumpMap: fabricBumpTex,
+        bumpScale: 0.015,
+      });
+      const boxBase = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.055, 0.11), velvetMat);
+      ringBoxGroup.add(boxBase);
+
+      const boxLid = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.11), velvetMat);
+      boxLid.position.set(0, 0.055, -0.055);
+      boxLid.rotation.x = -0.85;
+      ringBoxGroup.add(boxLid);
+
+      const diamondMesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.026, 0),
+        new THREE.MeshPhysicalMaterial({
+          color: '#e0f2fe',
+          roughness: 0.05,
+          metalness: 0.1,
+          clearcoat: 1.0,
+          emissive: '#bae6fd',
+          emissiveIntensity: 0.45,
+        })
+      );
+      diamondMesh.position.set(0, 0.046, 0);
+      ringBoxGroup.add(diamondMesh);
+
+      boyChar.rightArm.hand.add(ringBoxGroup);
+
+      // Floating 3D Hearts Pool (reused in animate loop)
+      const floating3DHearts = [];
+      const heartShape = new THREE.Shape();
+      heartShape.moveTo(0, -0.08);
+      heartShape.bezierCurveTo(-0.14, 0.02, -0.14, 0.14, 0, 0.06);
+      heartShape.bezierCurveTo(0.14, 0.14, 0.14, 0.02, 0, -0.08);
+      const heart3DGeo = new THREE.ShapeGeometry(heartShape, 12);
+      const heart3DMat = new THREE.MeshBasicMaterial({ color: '#ff3b6b', side: THREE.DoubleSide });
+
+      for (let i = 0; i < 18; i++) {
+        const hm = new THREE.Mesh(heart3DGeo, heart3DMat);
+        hm.visible = false;
+        hm.userData = { active: false, vy: 0, phase: i * 0.7 };
+        scene.add(hm);
+        floating3DHearts.push(hm);
+      }
+
+      function spawn3DHeartBurst(originVec) {
+        let spawned = 0;
+        for (let i = 0; i < floating3DHearts.length && spawned < 8; i++) {
+          const h = floating3DHearts[i];
+          if (!h.userData.active) {
+            h.visible = true;
+            h.userData.active = true;
+            h.userData.vy = 1.1 + Math.random() * 0.9;
+            h.userData.life = 0;
+            h.position.set(
+              originVec.x + (Math.random() - 0.5) * 1.4,
+              originVec.y + 0.6 + Math.random() * 0.6,
+              originVec.z + (Math.random() - 0.5) * 1.2
+            );
+            spawned++;
+          }
+        }
+      }
+
+      function spawn2DHeart() {
+        const layer = document.getElementById('hearts-layer');
+        if (!layer || layer.children.length > 26) return;
+        const el = document.createElement('div');
+        el.className = 'floating-heart-2d text-xl sm:text-2xl';
+        const emojis = ['❤️', '💖', '💕', '💘'];
+        el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        el.style.left = `${15 + Math.random() * 70}vw`;
+        el.style.bottom = `${10 + Math.random() * 20}vh`;
+        el.style.setProperty('--drift', `${(Math.random() - 0.5) * 90}px`);
+        el.style.setProperty('--dur', `${2.6 + Math.random() * 1.6}s`);
+        layer.appendChild(el);
+        setTimeout(() => el.remove(), 4200);
+      }
+
+      // =========================================================================
+      // 5. CONTROLS: JOYSTICK, KEYBOARD, ORBIT/PINCH, TAP-TO-WALK & COLLISIONS
+      // =========================================================================
+      const keysDown = new Set();
+      let sprintActive = false;
+
+      window.addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+        keysDown.add(e.code);
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') sprintActive = true;
+      });
+
+      window.addEventListener('keyup', (e) => {
+        keysDown.delete(e.code);
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') sprintActive = false;
+      });
+
+      // Virtual Analog Joystick (Pointer Capture)
+      const joystickZone = document.getElementById('joystick-zone');
+      const joystickKnob = document.getElementById('joystick-knob');
+      let joyPointerId = null;
+      let joyCenterX = 0;
+      let joyCenterY = 0;
+      let joyVecX = 0;
+      let joyVecY = 0; // -1 = forward, +1 = backward
+      const JOY_MAX_RADIUS = 38;
+
+      joystickZone.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        joystickZone.setPointerCapture(e.pointerId);
+        joyPointerId = e.pointerId;
+        const rect = joystickZone.getBoundingClientRect();
+        joyCenterX = rect.left + rect.width * 0.5;
+        joyCenterY = rect.top + rect.height * 0.5;
+        updateJoystickFromClient(e.clientX, e.clientY);
+      });
+
+      joystickZone.addEventListener('pointermove', (e) => {
+        if (e.pointerId !== joyPointerId) return;
+        e.stopPropagation();
+        updateJoystickFromClient(e.clientX, e.clientY);
+      });
+
+      function releaseJoystick(e) {
+        if (e.pointerId !== joyPointerId) return;
+        joyPointerId = null;
+        joyVecX = 0;
+        joyVecY = 0;
+        joystickKnob.style.transform = 'translate(0px, 0px)';
+      }
+
+      joystickZone.addEventListener('pointerup', releaseJoystick);
+      joystickZone.addEventListener('pointercancel', releaseJoystick);
+
+      function updateJoystickFromClient(cx, cy) {
+        let dx = cx - joyCenterX;
+        let dy = cy - joyCenterY;
+        const dist = Math.hypot(dx, dy);
+        if (dist > JOY_MAX_RADIUS) {
+          dx = (dx / dist) * JOY_MAX_RADIUS;
+          dy = (dy / dist) * JOY_MAX_RADIUS;
+        }
+        joystickKnob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+        joyVecX = dx / JOY_MAX_RADIUS;
+        joyVecY = dy / JOY_MAX_RADIUS;
+        if (Math.hypot(joyVecX, joyVecY) > 0.12) {
+          autoWalkTarget = null;
+          targetRingGroup.visible = false;
+        }
+      }
+
+      // Camera Orbit + Pinch Zoom + Tap-on-Floor Auto-Walk
+      let camYaw = 0; // 0 looks toward -Z (into the gallery)
+      let camPitch = 0.28;
+      let camDist = 5.4;
+      let autoWalkTarget = null;
+
+      const raycaster = new THREE.Raycaster();
+      const pointerNDC = new THREE.Vector2();
+      const activePointers = new Map();
+      let prevPinchDist = null;
+      let pointerDownPos = { x: 0, y: 0 };
+      let pointerDownTime = 0;
+
+      mainCanvas.addEventListener('pointerdown', (e) => {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size === 1) {
+          pointerDownPos = { x: e.clientX, y: e.clientY };
+          pointerDownTime = performance.now();
+          prevPinchDist = null;
+        } else if (activePointers.size === 2) {
+          const pts = Array.from(activePointers.values());
+          prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        }
+      });
+
+      mainCanvas.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+        const prev = activePointers.get(e.pointerId);
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (activePointers.size === 1) {
+          const dx = e.clientX - prev.x;
+          const dy = e.clientY - prev.y;
+          camYaw -= dx * 0.0065;
+          camPitch = clamp(camPitch + dy * 0.005, 0.08, 0.95);
+        } else if (activePointers.size === 2) {
+          const pts = Array.from(activePointers.values());
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (prevPinchDist && dist > 10) {
+            camDist = clamp(camDist - (dist - prevPinchDist) * 0.015, 2.4, 11.0);
+          }
+          prevPinchDist = dist;
+        }
+      });
+
+      mainCanvas.addEventListener('pointerup', (e) => {
+        const wasTap =
+          activePointers.size === 1 &&
+          Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) < 9 &&
+          performance.now() - pointerDownTime < 320;
+
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) prevPinchDist = null;
+
+        if (wasTap) {
+          handleCanvasTap(e.clientX, e.clientY);
+        }
+      });
+
+      mainCanvas.addEventListener('pointercancel', (e) => {
+        activePointers.delete(e.pointerId);
+        prevPinchDist = null;
+      });
+
+      mainCanvas.addEventListener(
+        'wheel',
+        (e) => {
+          e.preventDefault();
+          camDist = clamp(camDist + e.deltaY * 0.004, 2.4, 11.0);
+        },
+        { passive: false }
+      );
+
+      function handleCanvasTap(clientX, clientY) {
+        const rect = mainCanvas.getBoundingClientRect();
+        pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(pointerNDC, camera);
+
+        // Check artwork tap first
+        const artHits = raycaster.intersectObjects(interactiveArtworkMeshes, false);
+        if (artHits.length > 0) {
+          const artId = artHits[0].object.userData?.artworkId;
+          if (typeof artId === 'number') {
+            openArtworkModal(artId);
+            return;
+          }
+        }
+
+        // Otherwise raycast onto floor plane y = 0 for auto-walk
+        const floorHits = raycaster.intersectObject(floorMesh, false);
+        if (floorHits.length > 0) {
+          const pt = floorHits[0].point;
+          const tx = clamp(pt.x, -ROOM_HALF_W + 0.8, ROOM_HALF_W - 0.8);
+          const tz = clamp(pt.z, ROOM_BACK_Z + 1.2, ROOM_FRONT_Z - 1.2);
+          autoWalkTarget = { x: tx, z: tz };
+          targetRingGroup.position.set(tx, 0, tz);
+          targetRingGroup.visible = true;
+        }
+      }
+
+      // AABB Collision Resolution for Player Radius
+      const PLAYER_RADIUS = 0.36;
+      function resolveCollisions(pos) {
+        pos.x = clamp(pos.x, -ROOM_HALF_W + 0.55, ROOM_HALF_W - 0.55);
+        pos.z = clamp(pos.z, ROOM_BACK_Z + 0.85, ROOM_FRONT_Z - 0.75);
+
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
+          const closestX = clamp(pos.x, box.minX, box.maxX);
+          const closestZ = clamp(pos.z, box.minZ, box.maxZ);
+          const dx = pos.x - closestX;
+          const dz = pos.z - closestZ;
+          const distSq = dx * dx + dz * dz;
+
+          if (distSq < PLAYER_RADIUS * PLAYER_RADIUS) {
+            const dist = Math.sqrt(distSq) || 0.001;
+            const overlap = PLAYER_RADIUS - dist;
+            pos.x += (dx / dist) * overlap;
+            pos.z += (dz / dist) * overlap;
+          }
+        }
+      }
+
+      // =========================================================================
+      // 6. ARTWORK INSPECTION MODAL & CUSTOMIZATION DRAWER
+      // =========================================================================
+      const artworkModal = document.getElementById('artwork-modal');
+      const artworkModalTitle = document.getElementById('artwork-modal-title');
+      const artworkModalImg = document.getElementById('artwork-modal-img');
+      const artworkModalCaption = document.getElementById('artwork-modal-caption');
+      const editArtTitle = document.getElementById('edit-art-title');
+      const editArtCaption = document.getElementById('edit-art-caption');
+      const editArtFile = document.getElementById('edit-art-file');
+      let currentEditingArtworkId = null;
+      let pendingUploadedArtDataUrl = null;
+
+      function openArtworkModal(id) {
+        const art = artworksData[id];
+        if (!art) return;
+        currentEditingArtworkId = id;
+        pendingUploadedArtDataUrl = null;
+        artworkModalTitle.textContent = art.title;
+        artworkModalImg.src = art.dataUrl;
+        artworkModalCaption.textContent = art.caption;
+        editArtTitle.value = art.title;
+        editArtCaption.value = art.caption;
+        artworkModal.classList.remove('hidden');
+      }
+
+      document.getElementById('btn-close-artwork').addEventListener('click', () => {
+        artworkModal.classList.add('hidden');
+      });
+
+      editArtFile.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          pendingUploadedArtDataUrl = String(reader.result);
+          artworkModalImg.src = pendingUploadedArtDataUrl;
+        };
+        reader.readAsDataURL(file);
+      });
+
+      document.getElementById('btn-save-artwork').addEventListener('click', () => {
+        if (currentEditingArtworkId === null) return;
+        const art = artworksData[currentEditingArtworkId];
+        art.title = editArtTitle.value.trim() || art.title;
+        art.caption = editArtCaption.value.trim() || art.caption;
+        if (pendingUploadedArtDataUrl) {
+          art.dataUrl = pendingUploadedArtDataUrl;
+          const newTex = new THREE.TextureLoader().load(art.dataUrl);
+          newTex.encoding = THREE.sRGBEncoding;
+          art.mesh.material.map = newTex;
+          art.mesh.material.needsUpdate = true;
+        }
+        artworkModalTitle.textContent = art.title;
+        artworkModalCaption.textContent = art.caption;
+        showToast('Memory updated in gallery!');
+      });
+
+      // Customize & Faces Drawer
+      const customizeDrawer = document.getElementById('customize-drawer');
+      document.getElementById('btn-customize').addEventListener('click', () => {
+        customizeDrawer.classList.remove('hidden');
+      });
+      document.getElementById('btn-close-customize').addEventListener('click', () => {
+        customizeDrawer.classList.add('hidden');
+      });
+
+      function refreshNamesAndLabels() {
+        document.getElementById('hud-couple-sub').textContent = `From ${state.senderName} · To ${state.receiverName}`;
+        document.getElementById('curtain-couple-line').textContent = `From ${state.senderName} | To ${state.receiverName}`;
+        document.getElementById('boy-nametag-text').textContent = state.senderName;
+        document.getElementById('girl-nametag-text').textContent = state.receiverName;
+        document.getElementById('kiss-prompt-text').textContent = `${state.senderName} wants to kiss you`;
+
+        const newPlaqueTex = createDedicationPlaqueTexture(state.receiverName, state.dedicationMsg);
+        plaqueFaceMesh.material.map = newPlaqueTex;
+        plaqueFaceMesh.material.needsUpdate = true;
+      }
+
+      document.getElementById('btn-apply-names').addEventListener('click', () => {
+        state.senderName = document.getElementById('input-sender-name').value.trim() || 'Leo';
+        state.receiverName = document.getElementById('input-receiver-name').value.trim() || 'Maya';
+        state.dedicationMsg =
+          document.getElementById('input-dedication-msg').value.trim() ||
+          'Every step inside this gallery holds my favorite moments with you.';
+        refreshNamesAndLabels();
+        showToast('Names & plaque updated!');
+      });
+
+      // Skin Tone Live Recoloring
+      const girlSkinInput = document.getElementById('girl-skin-color');
+      const boySkinInput = document.getElementById('boy-skin-color');
+
+      girlSkinInput.addEventListener('input', (e) => {
+        state.girlSkinHex = e.target.value;
+        girlChar.skinMat.color.set(state.girlSkinHex);
+        if (!state.girlFaceDataUrl) {
+          const t = createDefaultFaceTexture(state.girlSkinHex, true);
+          girlChar.faceMat.map = t;
+          girlChar.faceMat.needsUpdate = true;
+        }
+      });
+
+      boySkinInput.addEventListener('input', (e) => {
+        state.boySkinHex = e.target.value;
+        boyChar.skinMat.color.set(state.boySkinHex);
+        if (!state.boyFaceDataUrl) {
+          const t = createDefaultFaceTexture(state.boySkinHex, false);
+          boyChar.faceMat.map = t;
+          boyChar.faceMat.needsUpdate = true;
+        }
+      });
+
+      document.getElementById('btn-reset-faces').addEventListener('click', () => {
+        state.girlFaceDataUrl = null;
+        state.boyFaceDataUrl = null;
+        girlChar.faceMat.map = createDefaultFaceTexture(state.girlSkinHex, true);
+        girlChar.faceMat.needsUpdate = true;
+        boyChar.faceMat.map = createDefaultFaceTexture(state.boySkinHex, false);
+        boyChar.faceMat.needsUpdate = true;
+        showToast('Default sculpted faces restored');
+      });
+
+      // =========================================================================
+      // 7. REALISTIC 3D FACE PHOTO STUDIO (DUAL-PANE MODAL + LIVE 3D PREVIEW)
+      // =========================================================================
+      const faceStudioModal = document.getElementById('face-studio-modal');
+      const faceAlignCanvas = document.getElementById('face-align-canvas');
+      const faceAlignCtx = faceAlignCanvas.getContext('2d');
+      const facePreviewCanvas = document.getElementById('face-preview-canvas');
+
+      let activeFaceTarget = 'girl'; // 'girl' | 'boy'
+      let rawUploadedImg = null;
+      let faceParams = {
+        offsetX: 0,
+        offsetY: 0,
+        zoom: 1.0,
+        tiltDeg: 0,
+        stretch: 1.0,
+        warmth: 0,
+        featherPct: 24,
+      };
+
+      // Mini Three.js scene for live rotating 3D head preview
+      const previewRenderer = new THREE.WebGLRenderer({
+        canvas: facePreviewCanvas,
+        antialias: true,
+        alpha: true,
+      });
+      previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      previewRenderer.setSize(260, 260, false);
+      previewRenderer.outputEncoding = THREE.sRGBEncoding;
+
+      const previewScene = new THREE.Scene();
+      const previewCamera = new THREE.PerspectiveCamera(36, 1, 0.1, 10);
+      previewCamera.position.set(0, 0.04, 0.72);
+
+      previewScene.add(new THREE.AmbientLight('#fff6eb', 1.25));
+      const pDirLight = new THREE.DirectionalLight('#ffffff', 1.1);
+      pDirLight.position.set(1.2, 1.8, 2.0);
+      previewScene.add(pDirLight);
+
+      const previewHeadMat = new THREE.MeshPhysicalMaterial({
+        color: '#ffffff',
+        roughness: 0.5,
+        clearcoat: 0.15,
+      });
+      const previewHeadMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 28), previewHeadMat);
+      previewHeadMesh.scale.set(0.95, 1.14, 1.04);
+      previewScene.add(previewHeadMesh);
+
+      const previewHairMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.192, 24, 20),
+        new THREE.MeshStandardMaterial({ color: '#241814', roughness: 0.65 })
+      );
+      previewHairMesh.scale.set(0.98, 1.12, 1.05);
+      previewHairMesh.position.set(0, 0.025, -0.02);
+      previewScene.add(previewHairMesh);
+
+      let previewYaw = 0;
+      let previewDragging = false;
+      let previewLastX = 0;
+
+      facePreviewCanvas.addEventListener('pointerdown', (e) => {
+        previewDragging = true;
+        previewLastX = e.clientX;
+        facePreviewCanvas.setPointerCapture(e.pointerId);
+      });
+      facePreviewCanvas.addEventListener('pointermove', (e) => {
+        if (!previewDragging) return;
+        previewYaw += (e.clientX - previewLastX) * 0.012;
+        previewLastX = e.clientX;
+      });
+      facePreviewCanvas.addEventListener('pointerup', (e) => {
+        previewDragging = false;
+        facePreviewCanvas.releasePointerCapture(e.pointerId);
+      });
+
+      function openFaceStudioFor(target) {
+        activeFaceTarget = target;
+        document.getElementById('face-studio-title').textContent =
+          target === 'girl' ? `3D Face Fit — ${state.receiverName} (Her)` : `3D Face Fit — ${state.senderName} (His)`;
+
+        faceParams = {
+          offsetX: 0,
+          offsetY: 0,
+          zoom: 1.0,
+          tiltDeg: 0,
+          stretch: 1.0,
+          warmth: 0,
+          featherPct: 24,
+        };
+        syncFaceSlidersFromParams();
+
+        const skinHex = target === 'girl' ? state.girlSkinHex : state.boySkinHex;
+        previewHeadMat.color.set(skinHex);
+        renderFaceAlignAndPreview();
+        faceStudioModal.classList.remove('hidden');
+      }
+
+      function syncFaceSlidersFromParams() {
+        document.getElementById('slider-face-zoom').value = faceParams.zoom;
+        document.getElementById('val-face-zoom').textContent = `${faceParams.zoom.toFixed(2)}x`;
+
+        document.getElementById('slider-face-tilt').value = faceParams.tiltDeg;
+        document.getElementById('val-face-tilt').textContent = `${faceParams.tiltDeg}°`;
+
+        document.getElementById('slider-face-stretch').value = faceParams.stretch;
+        document.getElementById('val-face-stretch').textContent = `${faceParams.stretch.toFixed(2)}x`;
+
+        document.getElementById('slider-face-warmth').value = faceParams.warmth;
+        document.getElementById('val-face-warmth').textContent = `${faceParams.warmth}`;
+
+        document.getElementById('slider-face-feather').value = faceParams.featherPct;
+        document.getElementById('val-face-feather').textContent = `${faceParams.featherPct}%`;
+      }
+
+      // Build composited 512x512 face texture from current alignment & blend params
+      function buildCompositedFaceCanvas() {
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = 512;
+        outCanvas.height = 512;
+        const ctx = outCanvas.getContext('2d');
+
+        const skinHex = activeFaceTarget === 'girl' ? state.girlSkinHex : state.boySkinHex;
+        const rgb = hexToRgb(skinHex);
+        const wAdj = faceParams.warmth;
+        const baseR = clamp(rgb.r + wAdj, 0, 255);
+        const baseG = clamp(rgb.g + wAdj * 0.5, 0, 255);
+        const baseB = clamp(rgb.b - wAdj * 0.35, 0, 255);
+
+        ctx.fillStyle = `rgb(${baseR}, ${baseG}, ${baseB})`;
+        ctx.fillRect(0, 0, 512, 512);
+
+        if (rawUploadedImg) {
+          ctx.save();
+          // Feathering mask via radial gradient or elliptical clip
+          const featherRatio = clamp(faceParams.featherPct / 100, 0.05, 0.55);
+          const cx = 256 + faceParams.offsetX * 1.95;
+          const cy = 256 + faceParams.offsetY * 1.95;
+
+          ctx.translate(cx, cy);
+          ctx.rotate((faceParams.tiltDeg * Math.PI) / 180);
+          ctx.scale(faceParams.zoom * faceParams.stretch, faceParams.zoom);
+
+          const aspect = rawUploadedImg.width / (rawUploadedImg.height || 1);
+          let drawW = 360;
+          let drawH = 360;
+          if (aspect > 1) {
+            drawH = 360 / aspect;
+          } else {
+            drawW = 360 * aspect;
+          }
+
+          ctx.drawImage(rawUploadedImg, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
+
+          // Soft edge blend back toward base skin tone around border
+          const grad = ctx.createRadialGradient(0, 0, 145 * (1 - featherRatio * 0.7), 0, 0, 215);
+          grad.addColorStop(0, `rgba(${baseR}, ${baseG}, ${baseB}, 0)`);
+          grad.addColorStop(1, `rgba(${baseR}, ${baseG}, ${baseB}, 0.92)`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(-256, -256, 512, 512);
+
+          ctx.restore();
+        }
+
+        return outCanvas;
+      }
+
+      function renderFaceAlignAndPreview() {
+        const w = faceAlignCanvas.width;
+        const h = faceAlignCanvas.height;
+        faceAlignCtx.clearRect(0, 0, w, h);
+
+        const compCanvas = buildCompositedFaceCanvas();
+        faceAlignCtx.drawImage(compCanvas, 0, 0, w, h);
+
+        // Anatomical Face-Oval & Eye-Line Guide Overlay
+        faceAlignCtx.save();
+        faceAlignCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+        faceAlignCtx.lineWidth = 1.6;
+        faceAlignCtx.setLineDash([5, 4]);
+        faceAlignCtx.beginPath();
+        faceAlignCtx.ellipse(w * 0.5, h * 0.5, w * 0.25, h * 0.35, 0, 0, Math.PI * 2);
+        faceAlignCtx.stroke();
+
+        // Eye-line guide
+        faceAlignCtx.strokeStyle = 'rgba(251, 113, 133, 0.78)';
+        faceAlignCtx.beginPath();
+        faceAlignCtx.moveTo(w * 0.22, h * 0.45);
+        faceAlignCtx.lineTo(w * 0.78, h * 0.45);
+        faceAlignCtx.stroke();
+        faceAlignCtx.restore();
+
+        // Update 3D Preview Head Texture
+        const tex = new THREE.CanvasTexture(compCanvas);
+        tex.encoding = THREE.sRGBEncoding;
+        previewHeadMat.map = tex;
+        previewHeadMat.needsUpdate = true;
+        previewRenderer.render(previewScene, previewCamera);
+      }
+
+      // Drag photo inside 2D Alignment Stage
+      let alignDragging = false;
+      let alignLastPos = { x: 0, y: 0 };
+
+      faceAlignCanvas.addEventListener('pointerdown', (e) => {
+        alignDragging = true;
+        alignLastPos = { x: e.clientX, y: e.clientY };
+        faceAlignCanvas.setPointerCapture(e.pointerId);
+      });
+      faceAlignCanvas.addEventListener('pointermove', (e) => {
+        if (!alignDragging) return;
+        faceParams.offsetX = clamp(faceParams.offsetX + (e.clientX - alignLastPos.x), -80, 80);
+        faceParams.offsetY = clamp(faceParams.offsetY + (e.clientY - alignLastPos.y), -80, 80);
+        alignLastPos = { x: e.clientX, y: e.clientY };
+        renderFaceAlignAndPreview();
+      });
+      faceAlignCanvas.addEventListener('pointerup', (e) => {
+        alignDragging = false;
+        faceAlignCanvas.releasePointerCapture(e.pointerId);
+      });
+
+      // Sliders listeners
+      document.getElementById('slider-face-zoom').addEventListener('input', (e) => {
+        faceParams.zoom = parseFloat(e.target.value);
+        document.getElementById('val-face-zoom').textContent = `${faceParams.zoom.toFixed(2)}x`;
+        renderFaceAlignAndPreview();
+      });
+      document.getElementById('slider-face-tilt').addEventListener('input', (e) => {
+        faceParams.tiltDeg = parseInt(e.target.value, 10);
+        document.getElementById('val-face-tilt').textContent = `${faceParams.tiltDeg}°`;
+        renderFaceAlignAndPreview();
+      });
+      document.getElementById('slider-face-stretch').addEventListener('input', (e) => {
+        faceParams.stretch = parseFloat(e.target.value);
+        document.getElementById('val-face-stretch').textContent = `${faceParams.stretch.toFixed(2)}x`;
+        renderFaceAlignAndPreview();
+      });
+      document.getElementById('slider-face-warmth').addEventListener('input', (e) => {
+        faceParams.warmth = parseInt(e.target.value, 10);
+        document.getElementById('val-face-warmth').textContent = `${faceParams.warmth}`;
+        renderFaceAlignAndPreview();
+      });
+      document.getElementById('slider-face-feather').addEventListener('input', (e) => {
+        faceParams.featherPct = parseInt(e.target.value, 10);
+        document.getElementById('val-face-feather').textContent = `${faceParams.featherPct}%`;
+        renderFaceAlignAndPreview();
+      });
+
+      document.getElementById('btn-reset-face-params').addEventListener('click', () => {
+        faceParams.offsetX = 0;
+        faceParams.offsetY = 0;
+        faceParams.zoom = 1.0;
+        faceParams.tiltDeg = 0;
+        faceParams.stretch = 1.0;
+        faceParams.warmth = 0;
+        faceParams.featherPct = 24;
+        syncFaceSlidersFromParams();
+        renderFaceAlignAndPreview();
+      });
+
+      function handleFaceUploadInput(inputEl, target) {
+        inputEl.addEventListener('change', (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              rawUploadedImg = img;
+              openFaceStudioFor(target);
+            };
+            img.src = String(reader.result);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      handleFaceUploadInput(document.getElementById('upload-girl-face'), 'girl');
+      handleFaceUploadInput(document.getElementById('upload-boy-face'), 'boy');
+
+      document.getElementById('btn-cancel-face-studio').addEventListener('click', () => {
+        faceStudioModal.classList.add('hidden');
+      });
+      document.getElementById('btn-close-face-studio').addEventListener('click', () => {
+        faceStudioModal.classList.add('hidden');
+      });
+
+      document.getElementById('btn-apply-realistic-face').addEventListener('click', () => {
+        const finalCanvas = buildCompositedFaceCanvas();
+        const dataUrl = finalCanvas.toDataURL('image/jpeg', 0.9);
+        const appliedTex = new THREE.CanvasTexture(finalCanvas);
+        appliedTex.encoding = THREE.sRGBEncoding;
+
+        if (activeFaceTarget === 'girl') {
+          state.girlFaceDataUrl = dataUrl;
+          girlChar.faceMat.map = appliedTex;
+          girlChar.faceMat.needsUpdate = true;
+          showToast(`Applied realistic 3D face for ${state.receiverName}!`);
+        } else {
+          state.boyFaceDataUrl = dataUrl;
+          boyChar.faceMat.map = appliedTex;
+          boyChar.faceMat.needsUpdate = true;
+          showToast(`Applied realistic 3D face for ${state.senderName}!`);
+        }
+        faceStudioModal.classList.add('hidden');
+      });
+
+      // =========================================================================
+      // 8. PROPOSAL FLOW, KISS SEQUENCE & QUALITY TOGGLE
+      // =========================================================================
+      const proposalCard = document.getElementById('proposal-card');
+      const proposalQuestionTitle = document.getElementById('proposal-question-title');
+      const proposalTeaseMsg = document.getElementById('proposal-tease-msg');
+      const btnProposalYes = document.getElementById('btn-proposal-yes');
+      const btnProposalNo = document.getElementById('btn-proposal-no');
+      const kissPromptBar = document.getElementById('kiss-prompt-bar');
+
+      const NO_TEASE_LINES = [
+        'baby... the other button 👀',
+        'i made you a whole museum 🥺',
+        'wrong button! try the big pink one 💘',
+        'even the kitty is looking at you 🥺🐱',
+        'come on, you know you want to say yes ✨',
+      ];
+
+      document.getElementById('btn-proposal-jump').addEventListener('click', () => {
+        // Teleport Girl & Boy smoothly near the Proposal Wall at z = -19.2
+        girlChar.root.position.set(0.35, 0, -19.2);
+        girlChar.root.rotation.y = Math.PI; // face proposal wall (-Z)
+        boyChar.root.position.set(-0.65, 0, -20.3);
+        autoWalkTarget = null;
+        targetRingGroup.visible = false;
+        proposalCard.classList.remove('hidden');
+      });
+
+      document.getElementById('btn-dismiss-proposal-card').addEventListener('click', () => {
+        proposalCard.classList.add('hidden');
+      });
+
+      btnProposalNo.addEventListener('click', () => {
+        if (state.proposalAccepted) return;
+        const msg = NO_TEASE_LINES[state.noClickCount % NO_TEASE_LINES.length];
+        state.noClickCount++;
+        proposalTeaseMsg.textContent = msg;
+
+        const noScale = Math.max(0.38, 1 - state.noClickCount * 0.14);
+        const yesScale = Math.min(1.65, 1 + state.noClickCount * 0.13);
+
+        btnProposalNo.style.transform = `scale(${noScale.toFixed(2)})`;
+        btnProposalYes.style.transform = `scale(${yesScale.toFixed(2)})`;
+      });
+
+      btnProposalYes.addEventListener('click', () => {
+        state.proposalAccepted = true;
+        proposalQuestionTitle.textContent = 'forever starts now ❤️';
+        proposalTeaseMsg.textContent = `Yay!! ${state.senderName} & ${state.receiverName} are officially engaged!`;
+        document.getElementById('proposal-buttons-row').classList.add('hidden');
+
+        // Update 3D wall screen to happy kitty & "forever starts now ❤️"
+        const happyScreenTex = createProposalScreenTexture(true);
+        proposalScreenMat.map = happyScreenTex;
+        proposalScreenMat.needsUpdate = true;
+
+        spawn3DHeartBurst(girlChar.root.position);
+        for (let i = 0; i < 14; i++) {
+          setTimeout(spawn2DHeart, i * 110);
+        }
+
+        setTimeout(() => {
+          kissPromptBar.classList.remove('hidden');
+        }, 750);
+      });
+
+      document.getElementById('btn-kiss-no').addEventListener('click', () => {
+        kissPromptBar.classList.add('hidden');
+        showToast('Saving that kiss for whenever you are ready 💕');
+      });
+
+      document.getElementById('btn-kiss-yes').addEventListener('click', () => {
+        kissPromptBar.classList.add('hidden');
+        proposalCard.classList.add('hidden');
+        state.kissTriggered = true;
+
+        // Position both characters face-to-face for romantic embrace/kiss
+        girlChar.root.position.set(0, 0, -19.3);
+        boyChar.root.position.set(0, 0, -18.65);
+
+        spawn3DHeartBurst(girlChar.root.position);
+        for (let i = 0; i < 18; i++) {
+          setTimeout(spawn2DHeart, i * 95);
+        }
+        showToast(`💕 ${state.senderName} & ${state.receiverName}`);
+      });
+
+      // Quality Toggle Cycle (Smooth -> Balanced -> Ultra)
+      const QUALITY_ORDER = ['smooth', 'balanced', 'ultra'];
+      const qualityLabelEl = document.getElementById('quality-label');
+
+      function applyQualityMode(mode) {
+        state.qualityMode = mode;
+        const preset = QUALITY_PRESETS[mode];
+        qualityLabelEl.textContent = preset.label;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.maxPixelRatioCap));
+        renderer.shadowMap.enabled = preset.shadows;
+        dirLight.castShadow = preset.shadows;
+      }
+      applyQualityMode(state.qualityMode);
+
+      document.getElementById('btn-quality').addEventListener('click', () => {
+        const nextIdx = (QUALITY_ORDER.indexOf(state.qualityMode) + 1) % QUALITY_ORDER.length;
+        applyQualityMode(QUALITY_ORDER[nextIdx]);
+        showToast(`Graphics: ${QUALITY_PRESETS[state.qualityMode].label}`);
+      });
+
+      // =========================================================================
+      // 9. OPENING CURTAIN, LIFECYCLE PAUSE & CONTEXT LOSS RECOVERY
+      // =========================================================================
+      const curtainEl = document.getElementById('opening-curtain');
+      const progressBarEl = document.getElementById('curtain-progress-bar');
+      const statusTextEl = document.getElementById('curtain-status-text');
+
+      function dismissOpeningCurtain() {
+        if (state.enteredMuseum) return;
+        state.enteredMuseum = true;
+        curtainEl.style.opacity = '0';
+        setTimeout(() => {
+          curtainEl.classList.add('hidden');
+        }, 720);
+      }
+
+      document.getElementById('btn-enter-museum').addEventListener('click', dismissOpeningCurtain);
+
+      // Smooth progress bar simulation on load
+      let loadProgress = 0;
+      const progInterval = setInterval(() => {
+        loadProgress = Math.min(100, loadProgress + 16);
+        progressBarEl.style.width = `${loadProgress}%`;
+        if (loadProgress >= 100) {
+          clearInterval(progInterval);
+          statusTextEl.textContent = 'Ready — welcome to Our Museum';
+          setTimeout(dismissOpeningCurtain, 550);
+        }
+      }, 130);
+
+      // Pause loop when tab is hidden
+      let isPausedByVisibility = false;
+      document.addEventListener('visibilitychange', () => {
+        isPausedByVisibility = document.hidden;
+        if (!document.hidden) {
+          clock.getDelta(); // flush delta spike
+        }
+      });
+
+      // WebGL Context Lost & Restored
+      mainCanvas.addEventListener(
+        'webglcontextlost',
+        (e) => {
+          e.preventDefault();
+          isPausedByVisibility = true;
+          showToast('Graphics context paused — restoring...');
+        },
+        false
+      );
+
+      mainCanvas.addEventListener(
+        'webglcontextrestored',
+        () => {
+          isPausedByVisibility = false;
+          renderer.setSize(window.innerWidth, window.innerHeight, false);
+          showToast('Graphics context restored!');
+        },
+        false
+      );
+
+      window.addEventListener('resize', () => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        camera.aspect = w / Math.max(1, h);
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      });
+
+      // =========================================================================
+      // 10. ZERO-GC ANIMATION LOOP (PRE-ALLOCATED VECTORS & COMPANION AI)
+      // =========================================================================
+      const clock = new THREE.Clock();
+
+      // Pre-allocated math objects outside animate()
+      const _moveDir = new THREE.Vector3();
+      const _forward = new THREE.Vector3();
+      const _right = new THREE.Vector3();
+      const _desiredCamPos = new THREE.Vector3();
+      const _lookTarget = new THREE.Vector3();
+      const _boyDesiredPos = new THREE.Vector3();
+      const _projVec = new THREE.Vector3();
+
+      const boyLabelGroup = document.getElementById('boy-label-group');
+      const girlLabelGroup = document.getElementById('girl-label-group');
+      const boySpeechBubble = document.getElementById('boy-speech-bubble');
+      const fpsBadge = document.getElementById('fps-badge');
+
+      const SPEECH_PHRASES = ['hi baby 🥰', 'same hands 🥰❤️', 'please say yes 🫶💍'];
+      let speechTimer = 2.2;
+      let speechIdx = 0;
+      let elapsedTotal = 0;
+      let fpsFrames = 0;
+      let fpsAccum = 0;
+      let proposalCardAutoShown = false;
+
+      function animateCharacterLimbs(charObj, speedRatio, t, isKneeling, isEmbracing) {
+        const walkFreq = 9.5;
+        const swing = speedRatio * 0.65;
+
+        if (isEmbracing) {
+          charObj.hipsGroup.position.y = 0.91;
+          charObj.leftLeg.hipJoint.rotation.x = -0.05;
+          charObj.rightLeg.hipJoint.rotation.x = -0.05;
+          charObj.leftLeg.kneeJoint.rotation.x = 0.08;
+          charObj.rightLeg.kneeJoint.rotation.x = 0.08;
+          charObj.leftArm.shoulder.rotation.x = -0.75;
+          charObj.rightArm.shoulder.rotation.x = -0.75;
+          charObj.leftArm.shoulder.rotation.z = 0.35;
+          charObj.rightArm.shoulder.rotation.z = -0.35;
+          charObj.leftArm.elbow.rotation.x = -0.85;
+          charObj.rightArm.elbow.rotation.x = -0.85;
+          charObj.neckGroup.rotation.x = 0.14;
+          return;
+        }
+
+        if (isKneeling) {
+          // Boy kneels on right knee, lifts right arm with ring box
+          charObj.hipsGroup.position.y = lerp(charObj.hipsGroup.position.y, 0.56, 0.12);
+          charObj.rightLeg.hipJoint.rotation.x = lerp(charObj.rightLeg.hipJoint.rotation.x, -1.15, 0.12);
+          charObj.rightLeg.kneeJoint.rotation.x = lerp(charObj.rightLeg.kneeJoint.rotation.x, 1.55, 0.12);
+          charObj.leftLeg.hipJoint.rotation.x = lerp(charObj.leftLeg.hipJoint.rotation.x, -0.75, 0.12);
+          charObj.leftLeg.kneeJoint.rotation.x = lerp(charObj.leftLeg.kneeJoint.rotation.x, 0.75, 0.12);
+
+          charObj.rightArm.shoulder.rotation.x = lerp(charObj.rightArm.shoulder.rotation.x, -1.15, 0.12);
+          charObj.rightArm.shoulder.rotation.z = lerp(charObj.rightArm.shoulder.rotation.z, -0.22, 0.12);
+          charObj.rightArm.elbow.rotation.x = lerp(charObj.rightArm.elbow.rotation.x, -0.35, 0.12);
+          charObj.neckGroup.rotation.x = lerp(charObj.neckGroup.rotation.x, -0.18, 0.12);
+          return;
+        }
+
+        charObj.hipsGroup.position.y = lerp(
+          charObj.hipsGroup.position.y,
+          0.92 + Math.abs(Math.sin(t * walkFreq)) * 0.025 * speedRatio,
+          0.2
+        );
+        charObj.neckGroup.rotation.x = lerp(charObj.neckGroup.rotation.x, 0, 0.15);
+
+        const legSwing = Math.sin(t * walkFreq) * swing;
+        charObj.leftLeg.hipJoint.rotation.x = legSwing;
+        charObj.rightLeg.hipJoint.rotation.x = -legSwing;
+        charObj.leftLeg.kneeJoint.rotation.x = Math.max(0, -Math.cos(t * walkFreq)) * swing * 1.1;
+        charObj.rightLeg.kneeJoint.rotation.x = Math.max(0, Math.cos(t * walkFreq)) * swing * 1.1;
+
+        // Arm swing + periodic wave
+        const waveActive = !isKneeling && speedRatio < 0.1 && Math.sin(t * 1.1) > 0.78;
+        if (waveActive && charObj === boyChar) {
+          charObj.rightArm.shoulder.rotation.x = -2.2;
+          charObj.rightArm.shoulder.rotation.z = -0.35;
+          charObj.rightArm.elbow.rotation.x = -0.4 + Math.sin(t * 14) * 0.35;
+        } else {
+          charObj.rightArm.shoulder.rotation.x = legSwing * 0.85;
+          charObj.rightArm.shoulder.rotation.z = -0.06;
+          charObj.rightArm.elbow.rotation.x = -0.15;
+        }
+
+        charObj.leftArm.shoulder.rotation.x = -legSwing * 0.85;
+        charObj.leftArm.shoulder.rotation.z = 0.06;
+        charObj.leftArm.elbow.rotation.x = -0.15;
+      }
+
+      function updateProjectedLabel(el, worldX, worldY, worldZ) {
+        _projVec.set(worldX, worldY, worldZ);
+        _projVec.project(camera);
+        if (_projVec.z > 1) {
+          el.classList.add('hidden');
+          return;
+        }
+        const x = (_projVec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-_projVec.y * 0.5 + 0.5) * window.innerHeight;
+        el.classList.remove('hidden');
+        el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`;
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        if (isPausedByVisibility) return;
+
+        const dt = Math.min(clock.getDelta(), 0.05);
+        elapsedTotal += dt;
+
+        // FPS counter badge
+        fpsFrames++;
+        fpsAccum += dt;
+        if (fpsAccum >= 0.6) {
+          fpsBadge.textContent = `${Math.round(fpsFrames / fpsAccum)} FPS`;
+          fpsFrames = 0;
+          fpsAccum = 0;
+        }
+
+        // 1. Gather Movement Input (Keyboard + Joystick + Auto-Walk)
+        let inX = joyVecX;
+        let inZ = joyVecY;
+        if (keysDown.has('KeyA') || keysDown.has('ArrowLeft')) inX -= 1;
+        if (keysDown.has('KeyD') || keysDown.has('ArrowRight')) inX += 1;
+        if (keysDown.has('KeyW') || keysDown.has('ArrowUp')) inZ -= 1;
+        if (keysDown.has('KeyS') || keysDown.has('ArrowDown')) inZ += 1;
+
+        const inputMag = Math.hypot(inX, inZ);
+        if (inputMag > 0.08) {
+          autoWalkTarget = null;
+          targetRingGroup.visible = false;
+        }
+
+        _moveDir.set(0, 0, 0);
+        if (inputMag > 0.08) {
+          const normX = inX / Math.max(1, inputMag);
+          const normZ = inZ / Math.max(1, inputMag);
+
+          _forward.set(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+          _right.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
+
+          _moveDir.addScaledVector(_right, normX);
+          _moveDir.addScaledVector(_forward, -normZ);
+          if (_moveDir.lengthSq() > 1) _moveDir.normalize();
+        } else if (autoWalkTarget) {
+          const dx = autoWalkTarget.x - girlChar.root.position.x;
+          const dz = autoWalkTarget.z - girlChar.root.position.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 0.18) {
+            _moveDir.set(dx / dist, 0, dz / dist);
+          } else {
+            autoWalkTarget = null;
+            targetRingGroup.visible = false;
+          }
+        }
+
+        const moveSpeed = sprintActive ? 5.6 : 3.3;
+        const currentSpeed = _moveDir.length() * moveSpeed;
+
+        if (currentSpeed > 0.05 && !state.kissTriggered) {
+          girlChar.root.position.x += _moveDir.x * currentSpeed * dt;
+          girlChar.root.position.z += _moveDir.z * currentSpeed * dt;
+          resolveCollisions(girlChar.root.position);
+
+          const targetYaw = Math.atan2(_moveDir.x, _moveDir.z);
+          girlChar.root.rotation.y = lerpAngle(girlChar.root.rotation.y, targetYaw, dt * 11);
+        }
+
+        // Pulse target ring if active
+        if (targetRingGroup.visible) {
+          const pulse = 1 + Math.sin(elapsedTotal * 7) * 0.16;
+          targetRingGroup.scale.set(pulse, 1, pulse);
+        }
+
+        // 2. Check Proximity to End-of-Hall Proposal Wall (z < -16.8)
+        const nearProposalWall = girlChar.root.position.z < -16.8;
+        if (nearProposalWall && !proposalCardAutoShown && !state.proposalAccepted) {
+          proposalCardAutoShown = true;
+          proposalCard.classList.remove('hidden');
+        }
+
+        // 3. Companion AI (Boy follows Girl, avoids collisions, kneels with ring at Proposal Wall)
+        let boyKneeling = false;
+        let boySpeedRatio = 0;
+
+        if (state.kissTriggered) {
+          boyChar.root.rotation.y = lerpAngle(boyChar.root.rotation.y, Math.PI, dt * 8);
+          girlChar.root.rotation.y = lerpAngle(girlChar.root.rotation.y, 0, dt * 8);
+          animateCharacterLimbs(boyChar, 0, elapsedTotal, false, true);
+          animateCharacterLimbs(girlChar, 0, elapsedTotal, false, true);
+        } else if (nearProposalWall) {
+          // Boy walks ahead near proposal wall, kneels on one knee, opens ring box
+          _boyDesiredPos.set(girlChar.root.position.x - 0.85, 0, Math.max(ROOM_BACK_Z + 1.35, girlChar.root.position.z - 1.05));
+          const bdx = _boyDesiredPos.x - boyChar.root.position.x;
+          const bdz = _boyDesiredPos.z - boyChar.root.position.z;
+          const bdist = Math.hypot(bdx, bdz);
+
+          if (bdist > 0.16) {
+            const bStep = Math.min(bdist, 3.6 * dt);
+            boyChar.root.position.x += (bdx / bdist) * bStep;
+            boyChar.root.position.z += (bdz / bdist) * bStep;
+            boyChar.root.rotation.y = lerpAngle(boyChar.root.rotation.y, Math.atan2(bdx, bdz), dt * 10);
+            boySpeedRatio = 0.7;
+          } else {
+            boyKneeling = true;
+            // Face toward Girl
+            const toGirlYaw = Math.atan2(
+              girlChar.root.position.x - boyChar.root.position.x,
+              girlChar.root.position.z - boyChar.root.position.z
+            );
+            boyChar.root.rotation.y = lerpAngle(boyChar.root.rotation.y, toGirlYaw, dt * 8);
+          }
+
+          ringBoxGroup.visible = boyKneeling;
+          if (ringBoxGroup.visible) {
+            diamondMesh.rotation.y += dt * 3.2;
+          }
+          animateCharacterLimbs(boyChar, boySpeedRatio, elapsedTotal, boyKneeling, false);
+          animateCharacterLimbs(girlChar, clamp(currentSpeed / 4.5, 0, 1), elapsedTotal, false, false);
+        } else {
+          ringBoxGroup.visible = false;
+          // Follow Girl slightly behind and to the side
+          const sideOffsetX = Math.cos(girlChar.root.rotation.y) * 0.95;
+          const backOffsetZ = -Math.sin(girlChar.root.rotation.y) * 1.15;
+          _boyDesiredPos.set(
+            clamp(girlChar.root.position.x + sideOffsetX, -ROOM_HALF_W + 0.7, ROOM_HALF_W - 0.7),
+            0,
+            clamp(girlChar.root.position.z + backOffsetZ + 1.1, ROOM_BACK_Z + 1.2, ROOM_FRONT_Z - 1.0)
+          );
+
+          const bdx = _boyDesiredPos.x - boyChar.root.position.x;
+          const bdz = _boyDesiredPos.z - boyChar.root.position.z;
+          const bdist = Math.hypot(bdx, bdz);
+
+          if (bdist > 0.35) {
+            const followSpeed = clamp(bdist * 2.2, 1.5, 5.4);
+            const step = Math.min(bdist, followSpeed * dt);
+            boyChar.root.position.x += (bdx / bdist) * step;
+            boyChar.root.position.z += (bdz / bdist) * step;
+            resolveCollisions(boyChar.root.position);
+            boyChar.root.rotation.y = lerpAngle(boyChar.root.rotation.y, Math.atan2(bdx, bdz), dt * 9);
+            boySpeedRatio = clamp(followSpeed / 4.5, 0.2, 1);
+          }
+
+          animateCharacterLimbs(boyChar, boySpeedRatio, elapsedTotal, false, false);
+          animateCharacterLimbs(girlChar, clamp(currentSpeed / 4.5, 0, 1), elapsedTotal, false, false);
+        }
+
+        // 4. Speech Bubble Rotation
+        speechTimer -= dt;
+        if (speechTimer <= 0) {
+          speechTimer = 3.6;
+          if (nearProposalWall && !state.proposalAccepted) {
+            boySpeechBubble.textContent = SPEECH_PHRASES[2];
+          } else {
+            boySpeechBubble.textContent = SPEECH_PHRASES[speechIdx % 2];
+            speechIdx++;
+          }
+          boySpeechBubble.classList.remove('hidden');
+          setTimeout(() => {
+            boySpeechBubble.classList.add('hidden');
+          }, 2300);
+        }
+
+        // 5. Update 3D Floating Hearts & Proposal Screen Glow
+        proposalGlowLight.intensity = 1.25 + Math.sin(elapsedTotal * 3) * 0.25;
+        for (let i = 0; i < floating3DHearts.length; i++) {
+          const h = floating3DHearts[i];
+          if (!h.userData.active) continue;
+          h.userData.life += dt;
+          h.position.y += h.userData.vy * dt;
+          h.position.x += Math.sin(elapsedTotal * 3 + h.userData.phase) * 0.4 * dt;
+          h.rotation.y += dt * 1.8;
+          if (h.userData.life > 2.4) {
+            h.userData.active = false;
+            h.visible = false;
+          }
+        }
+
+        // 6. Camera Follow Orbit
+        const gx = girlChar.root.position.x;
+        const gz = girlChar.root.position.z;
+        const horizDist = Math.cos(camPitch) * camDist;
+        const vertDist = Math.sin(camPitch) * camDist;
+
+        _desiredCamPos.set(
+          gx + Math.sin(camYaw) * horizDist,
+          1.25 + vertDist,
+          gz + Math.cos(camYaw) * horizDist
+        );
+        _desiredCamPos.x = clamp(_desiredCamPos.x, -ROOM_HALF_W + 0.5, ROOM_HALF_W - 0.5);
+        _desiredCamPos.z = clamp(_desiredCamPos.z, ROOM_BACK_Z + 0.6, ROOM_FRONT_Z - 0.5);
+
+        camera.position.lerp(_desiredCamPos, 1 - Math.exp(-10 * dt));
+        _lookTarget.set(gx, 1.28, gz - 0.4);
+        camera.lookAt(_lookTarget);
+
+        // 7. Update 2D-Projected Nametags
+        updateProjectedLabel(girlLabelGroup, gx, 1.86, gz);
+        updateProjectedLabel(boyLabelGroup, boyChar.root.position.x, boyKneeling ? 1.48 : 1.9, boyChar.root.position.z);
+
+        renderer.render(scene, camera);
+      }
+
+      window.onload = function () {
+        animate();
+      };
+    })();
+  </script>
+</body>
+</html>
